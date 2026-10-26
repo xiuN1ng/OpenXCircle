@@ -249,6 +249,26 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     return texture;
   };
 
+  // 4b. Celestial Constellation Label Texture Generator
+  const createConstellationLabelTexture = (name: string): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.font = '600 22px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.shadowColor = 'rgba(186, 230, 253, 0.9)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.92)';
+    ctx.fillText(name, 160, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
   // 5. High-definition 512x512 celestial jewel billboard canvas texture generator
   const createPlanetSpriteTexture = (
     avatarUrl: string,
@@ -636,6 +656,274 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       shootingStarEnd.set(startX - 180, startY - 90, startZ - 140);
     };
 
+    // 8b. Deep Sky Mythological & Cyber Constellations (深空神话星宿图谱)
+    const constellationGroup = new THREE.Group();
+    scene.add(constellationGroup);
+
+    // Helper to map spherical celestial coordinates (theta, phi, radius) to 3D Cartesian coordinates
+    const spherePoint = (theta: number, phi: number, r: number): THREE.Vector3 => {
+      return new THREE.Vector3(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.cos(phi),
+        r * Math.sin(phi) * Math.sin(theta)
+      );
+    };
+
+    interface ConstellationDef {
+      name: string;
+      labelPos: THREE.Vector3;
+      stars: THREE.Vector3[];
+      edges: [number, number][];
+      color: number;
+    }
+
+    const constellations: ConstellationDef[] = [
+      // 1. 双子共鸣座 (Gemini - The Cosmic Encounter)
+      {
+        name: '✦ 双子共鸣座 · Gemini',
+        labelPos: spherePoint(0.75, 0.90, 580),
+        color: 0xfef08a,
+        stars: [
+          spherePoint(0.72, 0.98, 580), // 0: Castor (Cyan diamond)
+          spherePoint(0.78, 1.00, 580), // 1: Pollux (Warm gold)
+          spherePoint(0.74, 1.08, 580), // 2: Wasat
+          spherePoint(0.81, 1.10, 580), // 3: Mebsuta
+          spherePoint(0.73, 1.16, 580), // 4: Mekbuda
+          spherePoint(0.82, 1.18, 580), // 5: Alhena
+          spherePoint(0.69, 1.22, 580), // 6: Tejat
+          spherePoint(0.85, 1.24, 580), // 7: Propus
+        ],
+        edges: [
+          [0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5], [4, 6], [5, 7]
+        ],
+      },
+      // 2. 仙后之冠 (Cassiopeia - Queen's Crown)
+      {
+        name: '✦ 仙后之冠 · Cassiopeia',
+        labelPos: spherePoint(3.23, 0.30, 600),
+        color: 0xc084fc,
+        stars: [
+          spherePoint(3.08, 0.45, 600), // 0: Caph
+          spherePoint(3.15, 0.38, 600), // 1: Schedar
+          spherePoint(3.22, 0.46, 600), // 2: Navi
+          spherePoint(3.30, 0.39, 600), // 3: Ruchbah
+          spherePoint(3.38, 0.44, 600), // 4: Segin
+        ],
+        edges: [
+          [0, 1], [1, 2], [2, 3], [3, 4]
+        ],
+      },
+      // 3. 赛博天鹅座 (Cygnus - Northern Cross)
+      {
+        name: '✦ 赛博天鹅座 · Cygnus',
+        labelPos: spherePoint(2.05, 0.62, 570),
+        color: 0x93c5fd,
+        stars: [
+          spherePoint(2.05, 0.72, 570), // 0: Deneb (Tail)
+          spherePoint(2.05, 0.85, 570), // 1: Sadr (Center)
+          spherePoint(2.05, 1.02, 570), // 2: Albireo (Head)
+          spherePoint(1.90, 0.88, 570), // 3: Gienah (Left wing)
+          spherePoint(2.20, 0.82, 570), // 4: Aljanah (Right wing)
+        ],
+        edges: [
+          [0, 1], [1, 2], [3, 1], [1, 4]
+        ],
+      },
+      // 4. 织女天琴座 (Lyra - Celestial Harp)
+      {
+        name: '✦ 织女天琴座 · Lyra',
+        labelPos: spherePoint(1.48, 0.44, 590),
+        color: 0xbae6fd,
+        stars: [
+          spherePoint(1.48, 0.54, 590), // 0: Vega
+          spherePoint(1.44, 0.64, 590), // 1: Sheliak
+          spherePoint(1.52, 0.66, 590), // 2: Sulafat
+          spherePoint(1.42, 0.72, 590), // 3: Delta Lyrae
+          spherePoint(1.50, 0.74, 590), // 4: Zeta Lyrae
+        ],
+        edges: [
+          [0, 1], [0, 2], [1, 2], [1, 3], [2, 4], [3, 4]
+        ],
+      },
+      // 5. 猎户星魂 (Orion - Hunter's Girdle)
+      {
+        name: '✦ 猎户星魂 · Orion',
+        labelPos: spherePoint(4.85, 1.12, 580),
+        color: 0xfde047,
+        stars: [
+          spherePoint(4.75, 1.24, 580), // 0: Betelgeuse (Orange supergiant)
+          spherePoint(4.95, 1.25, 580), // 1: Bellatrix
+          spherePoint(4.81, 1.34, 580), // 2: Alnitak (Belt 1)
+          spherePoint(4.85, 1.35, 580), // 3: Alnilam (Belt 2)
+          spherePoint(4.89, 1.36, 580), // 4: Mintaka (Belt 3)
+          spherePoint(4.78, 1.47, 580), // 5: Saiph
+          spherePoint(4.94, 1.48, 580), // 6: Rigel (Blue supergiant)
+        ],
+        edges: [
+          [0, 1], [0, 2], [1, 4], [2, 3], [3, 4], [2, 5], [4, 6], [5, 6]
+        ],
+      },
+      // 6. 北斗星枢 (Big Dipper - Ursa Major)
+      {
+        name: '✦ 北斗星枢 · Ursa Major',
+        labelPos: spherePoint(3.95, 0.54, 610),
+        color: 0x93c5fd,
+        stars: [
+          spherePoint(3.84, 0.65, 610), // 0: Dubhe
+          spherePoint(3.82, 0.73, 610), // 1: Merak
+          spherePoint(3.91, 0.75, 610), // 2: Phecda
+          spherePoint(3.93, 0.67, 610), // 3: Megrez
+          spherePoint(4.02, 0.70, 610), // 4: Alioth
+          spherePoint(4.10, 0.75, 610), // 5: Mizar
+          spherePoint(4.18, 0.82, 610), // 6: Alkaid
+        ],
+        edges: [
+          [0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]
+        ],
+      },
+    ];
+
+    // Combine all constellation lines into geometry
+    const constLinePositions: number[] = [];
+    const constStarPositions: number[] = [];
+    const constStarColors: number[] = [];
+
+    constellations.forEach((c) => {
+      // Add lines
+      c.edges.forEach(([i1, i2]) => {
+        const p1 = c.stars[i1];
+        const p2 = c.stars[i2];
+        constLinePositions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+      });
+
+      // Add star points
+      c.stars.forEach((s, idx) => {
+        constStarPositions.push(s.x, s.y, s.z);
+        // Alpha / Head stars brighter
+        if (idx === 0) {
+          constStarColors.push(1.0, 0.95, 0.65);
+        } else {
+          constStarColors.push(0.72, 0.85, 1.0);
+        }
+      });
+
+      // Add celestial label sprite
+      const labelTex = createConstellationLabelTexture(c.name);
+      const labelMat = new THREE.SpriteMaterial({
+        map: labelTex,
+        transparent: true,
+        opacity: 0.58,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const labelSprite = new THREE.Sprite(labelMat);
+      labelSprite.scale.set(62, 12.5, 1);
+      labelSprite.position.copy(c.labelPos);
+      constellationGroup.add(labelSprite);
+    });
+
+    const constLineGeo = new THREE.BufferGeometry();
+    constLineGeo.setAttribute('position', new THREE.Float32BufferAttribute(constLinePositions, 3));
+    const constLineMat = new THREE.LineBasicMaterial({
+      color: 0x93c5fd,
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const constLineMesh = new THREE.LineSegments(constLineGeo, constLineMat);
+    constellationGroup.add(constLineMesh);
+
+    const constStarGeo = new THREE.BufferGeometry();
+    constStarGeo.setAttribute('position', new THREE.Float32BufferAttribute(constStarPositions, 3));
+    constStarGeo.setAttribute('color', new THREE.Float32BufferAttribute(constStarColors, 3));
+    const constStarMat = new THREE.PointsMaterial({
+      size: 8.5,
+      map: starTexture,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const constStarMesh = new THREE.Points(constStarGeo, constStarMat);
+    constellationGroup.add(constStarMesh);
+
+    // 8c. Armillary Celestial Astrolabe Rings (天球仪发光经纬环与黄道刻度轨)
+    const eclipticCurve = new THREE.EllipseCurve(0, 0, 560, 560, 0, Math.PI * 2, false, 0);
+    const eclipticPoints = eclipticCurve.getPoints(180);
+    const eclipticGeo = new THREE.BufferGeometry().setFromPoints(
+      eclipticPoints.map((p) => new THREE.Vector3(p.x, 0, p.y))
+    );
+    const eclipticMat = new THREE.LineBasicMaterial({
+      color: 0xfef08a,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const eclipticLine = new THREE.LineLoop(eclipticGeo, eclipticMat);
+    eclipticLine.rotation.x = THREE.MathUtils.degToRad(23.5);
+    eclipticLine.rotation.z = THREE.MathUtils.degToRad(12);
+    constellationGroup.add(eclipticLine);
+
+    // 12 Zodiac Diamond Markers along Ecliptic Ring
+    const zodiacGeo = new THREE.BufferGeometry();
+    const zodiacPositions: number[] = [];
+    for (let z = 0; z < 12; z++) {
+      const zAngle = (z / 12) * Math.PI * 2;
+      const zx = Math.cos(zAngle) * 560;
+      const zz = Math.sin(zAngle) * 560;
+      const v = new THREE.Vector3(zx, 0, zz);
+      v.applyAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(23.5));
+      v.applyAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(12));
+      zodiacPositions.push(v.x, v.y, v.z);
+    }
+    zodiacGeo.setAttribute('position', new THREE.Float32BufferAttribute(zodiacPositions, 3));
+    const zodiacMat = new THREE.PointsMaterial({
+      size: 7.2,
+      map: starTexture,
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const zodiacPoints = new THREE.Points(zodiacGeo, zodiacMat);
+    constellationGroup.add(zodiacPoints);
+
+    // Celestial Equator Loop
+    const equatorCurve = new THREE.EllipseCurve(0, 0, 590, 590, 0, Math.PI * 2, false, 0);
+    const equatorPoints = equatorCurve.getPoints(180);
+    const equatorGeo = new THREE.BufferGeometry().setFromPoints(
+      equatorPoints.map((p) => new THREE.Vector3(p.x, 0, p.y))
+    );
+    const equatorMat = new THREE.LineBasicMaterial({
+      color: 0x93c5fd,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const equatorLine = new THREE.LineLoop(equatorGeo, equatorMat);
+    constellationGroup.add(equatorLine);
+
+    // Celestial Meridian Loop
+    const meridianCurve = new THREE.EllipseCurve(0, 0, 590, 590, 0, Math.PI * 2, false, 0);
+    const meridianPoints = meridianCurve.getPoints(180);
+    const meridianGeo = new THREE.BufferGeometry().setFromPoints(
+      meridianPoints.map((p) => new THREE.Vector3(0, p.x, p.y))
+    );
+    const meridianMat = new THREE.LineBasicMaterial({
+      color: 0xc084fc,
+      transparent: true,
+      opacity: 0.14,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const meridianLine = new THREE.LineLoop(meridianGeo, meridianMat);
+    constellationGroup.add(meridianLine);
+
     // Clean tracking refs
     planetNodesRef.current = [];
     clickableSpritesRef.current.clear();
@@ -848,6 +1136,40 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           baseScale: spriteScale,
         });
       });
+
+      // 10d. Inner Ring Soul Constellation Web (核心社交星宿光网)
+      if (ringIdx === 0 && count >= 3) {
+        const socialPositions: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const next = (i + 1) % count;
+          const a1 = i * angleStep;
+          const a2 = next * angleStep;
+          socialPositions.push(
+            Math.cos(a1) * radius, 3.5, Math.sin(a1) * radius,
+            Math.cos(a2) * radius, 3.5, Math.sin(a2) * radius
+          );
+          // Intersecting chords if mutual
+          if (users[i].relationship === 'mutual' && count > 3) {
+            const cross = (i + 2) % count;
+            const aCross = cross * angleStep;
+            socialPositions.push(
+              Math.cos(a1) * radius, 3.5, Math.sin(a1) * radius,
+              Math.cos(aCross) * radius, 3.5, Math.sin(aCross) * radius
+            );
+          }
+        }
+        const socialGeo = new THREE.BufferGeometry();
+        socialGeo.setAttribute('position', new THREE.Float32BufferAttribute(socialPositions, 3));
+        const socialMat = new THREE.LineBasicMaterial({
+          color: 0xfde047,
+          transparent: true,
+          opacity: 0.22,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const socialMesh = new THREE.LineSegments(socialGeo, socialMat);
+        parentGroup.add(socialMesh);
+      }
     });
 
     // 10d. Gravitational Resonance Tether & Flowing Photon Particles
@@ -953,9 +1275,14 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         controls.update();
       }
 
-      // Slow deep-space celestial drift
+      // Slow deep-space celestial drift & Astrolabe rotation
       starField.rotation.y += 0.00008;
       nebulaField.rotation.y -= 0.00012;
+      constellationGroup.rotation.y += 0.00004;
+
+      // Constellation starlight subtle breathing twinkle
+      constStarMat.size = 8.2 + Math.sin(clock * 2.2) * 1.4;
+      constLineMat.opacity = 0.32 + Math.sin(clock * 1.5) * 0.08;
 
       // Floating Celestial Stardust Embers gentle upward drift
       const emberPosAttr = emberGeo.attributes.position as THREE.BufferAttribute;
