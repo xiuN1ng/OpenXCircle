@@ -16,14 +16,14 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
   onOpenExport,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [rotationAngle, setRotationAngle] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false); // Static by default for maximum performance & legibility!
+  const angleRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
 
   const theme = THEMES[settings.theme] || THEMES.cosmic;
 
-  // Render function
-  const render = useCallback(() => {
+  // Stable paint function
+  const paint = useCallback((angle: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -35,10 +35,10 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
       canvas.height = size;
     }
 
-    drawCircleCanvas(ctx, size, size, data, theme, settings, rotationAngle);
-  }, [data, theme, settings, rotationAngle]);
+    drawCircleCanvas(ctx, size, size, data, theme, settings, angle);
+  }, [data, theme, settings]);
 
-  // Preload avatars and trigger re-render as each avatar finishes downloading
+  // Preload avatars and repaint as each image arrives
   useEffect(() => {
     let active = true;
     const urls = [
@@ -51,7 +51,7 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
     urls.forEach((url) => {
       preloadImage(url).then((img) => {
         if (img && active) {
-          render();
+          paint(angleRef.current);
         }
       });
     });
@@ -59,27 +59,33 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
     return () => {
       active = false;
     };
-  }, [data, render]);
+  }, [data, paint]);
 
-  // Animation loop
+  // High performance animation loop (0 React re-renders per second!)
   useEffect(() => {
-    render();
+    paint(angleRef.current);
 
-    if (!isPlaying || settings.rotationSpeed === 0) return;
+    if (!isPlaying || settings.rotationSpeed === 0) {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+      return;
+    }
 
-    const animate = () => {
-      setRotationAngle((prev) => prev + 0.003 * settings.rotationSpeed);
-      animFrameRef.current = requestAnimationFrame(animate);
+    const loop = () => {
+      angleRef.current += 0.0025 * settings.rotationSpeed;
+      paint(angleRef.current);
+      animFrameRef.current = requestAnimationFrame(loop);
     };
 
-    animFrameRef.current = requestAnimationFrame(animate);
+    animFrameRef.current = requestAnimationFrame(loop);
 
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [isPlaying, settings.rotationSpeed, render]);
+  }, [isPlaying, settings.rotationSpeed, paint]);
 
   return (
     <div className="relative w-full flex flex-col items-center justify-center p-2 sm:p-4">
@@ -90,18 +96,21 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
           className="w-full h-full object-contain block select-none cursor-grab active:cursor-grabbing"
         />
 
-        {/* Floating Quick Action Controls */}
+        {/* Floating Controls */}
         <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl opacity-90 hover:opacity-100 transition-opacity">
           <button
             onClick={() => setIsPlaying(!isPlaying)}
             title={isPlaying ? '暂停自转' : '开启公转'}
             className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? <Pause className="w-4 h-4 text-indigo-400" /> : <Play className="w-4 h-4" />}
           </button>
 
           <button
-            onClick={() => setRotationAngle(0)}
+            onClick={() => {
+              angleRef.current = 0;
+              paint(0);
+            }}
             title="复位角度"
             className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >

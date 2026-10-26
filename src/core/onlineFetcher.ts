@@ -57,7 +57,7 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     throw new Error('请输入有效的 X 用户名');
   }
 
-  // 1. Fetch real target profile from FxTwitter API for bio & exact name
+  // 1. Fetch real target profile from FxTwitter API
   let fxProfile: FxTwitterUser | null = null;
   try {
     const fxResp = await fetch(`https://api.fxtwitter.com/${cleanHandle}`, {
@@ -92,8 +92,8 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
 
   let mutualCount = 0;
 
-  // Transform raw circleUsers to UserNode with reliable proxied avatar URLs
-  const scoredUsers: UserNode[] = rawData.circleUsers.map((u, i) => {
+  // Transform raw circleUsers to UserNode
+  const allScoredUsers: UserNode[] = rawData.circleUsers.map((u, i) => {
     const toYou = authorsToYou[u.screenName.toLowerCase()] || 0;
     const fromYou = targetsFromYou[u.screenName.toLowerCase()] || 0;
 
@@ -119,11 +119,9 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     const repliesCount = Math.max(1, toYou + fromYou);
     const score = Math.min(99, Math.max(12, Math.round(u.interactionScore || (u.interactionCount * 10))));
 
-    // Determine ring and rank
-    const ring = (i < 6 ? 1 : i < 18 ? 2 : 3) as 1 | 2 | 3;
-    const rank = (i < 6 ? 'S' : i < 18 ? 'A' : i < 35 ? 'B' : 'C') as 'S' | 'A' | 'B' | 'C';
+    // Assign rank
+    const rank = (i < 8 ? 'S' : i < 23 ? 'A' : i < 48 ? 'B' : 'C') as 'S' | 'A' | 'B' | 'C';
 
-    // Prioritize avatarUrlPreview provided by Yahoo search, and proxy through Worker for CORS
     const rawAvatar = u.avatarUrl || u.avatarUrlPreview;
     const avatar = rawAvatar
       ? `${PROXY_ENDPOINT}/?avatar=${encodeURIComponent(rawAvatar)}`
@@ -136,7 +134,7 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
       avatar,
       score,
       rank,
-      ring,
+      ring: (i < 8 ? 1 : i < 23 ? 2 : 3) as 1 | 2 | 3,
       relationship,
       interactions: {
         replies: repliesCount,
@@ -149,16 +147,18 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     };
   });
 
-  const innerRing = scoredUsers.filter((u) => u.ring === 1);
-  const middleRing = scoredUsers.filter((u) => u.ring === 2);
-  const outerRing = scoredUsers.filter((u) => u.ring === 3);
+  // Balanced layout for 3 orbital rings (8 in inner, 15 in middle, 24 in outer = 47 total on canvas)
+  // This completely eliminates avatar crowding and makes it look gorgeous!
+  const innerRing = allScoredUsers.slice(0, 8).map((u) => ({ ...u, ring: 1 as const }));
+  const middleRing = allScoredUsers.slice(8, 23).map((u) => ({ ...u, ring: 2 as const }));
+  const outerRing = allScoredUsers.slice(23, 47).map((u) => ({ ...u, ring: 3 as const }));
 
   const totalInteractions = rawData.counts
     ? rawData.counts.mentionsToYou + rawData.counts.mentionsFromYou
-    : scoredUsers.reduce((sum, u) => sum + u.interactions.total, 0);
+    : allScoredUsers.reduce((sum, u) => sum + u.interactions.total, 0);
 
-  const mutualRatio = scoredUsers.length > 0
-    ? Math.round((mutualCount / scoredUsers.length) * 100)
+  const mutualRatio = allScoredUsers.length > 0
+    ? Math.round((mutualCount / allScoredUsers.length) * 100)
     : 70;
 
   const targetName = fxProfile?.name || cleanHandle;
@@ -179,7 +179,7 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     innerRing,
     middleRing,
     outerRing,
-    allUsers: scoredUsers,
+    allUsers: allScoredUsers, // Keep all 85 users in allUsers for TierList and Insights!
     generatedAt: new Date().toISOString(),
     source: 'online',
     stats: {

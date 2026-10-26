@@ -3,7 +3,32 @@ import type { CircleData, CustomizationSettings, ThemeConfig } from '../types';
 // Cache loaded HTMLImageElement to avoid re-fetching on every frame
 const imageCache = new Map<string, HTMLImageElement | 'failed'>();
 
+// Pre-computed starfield positions for high performance
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  alpha: number;
+}
+let cachedStars: Star[] = [];
+
+function getStars(width: number, height: number): Star[] {
+  if (cachedStars.length === 80) return cachedStars;
+  const stars: Star[] = [];
+  for (let i = 0; i < 80; i++) {
+    stars.push({
+      x: (((Math.sin(i * 997) * 10000) % width) + width) % width,
+      y: (((Math.cos(i * 7919) * 10000) % height) + height) % height,
+      size: ((i % 3) + 1) * 0.8,
+      alpha: ((i % 5) + 3) * 0.08,
+    });
+  }
+  cachedStars = stars;
+  return stars;
+}
+
 export function preloadImage(url: string): Promise<HTMLImageElement | null> {
+  if (!url) return Promise.resolve(null);
   if (imageCache.has(url)) {
     const cached = imageCache.get(url);
     return Promise.resolve(cached === 'failed' ? null : cached || null);
@@ -49,7 +74,7 @@ export function drawCircleCanvas(
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Background Starfield / Particle Dust
+  // 2. High performance background starfield
   drawStarfield(ctx, width, height, theme);
 
   // 3. Central Glow Aura
@@ -75,8 +100,6 @@ export function drawCircleCanvas(
     ctx.strokeStyle = theme.ringColors[idx] || theme.ringColors[0];
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 6]);
-    ctx.shadowColor = theme.glowColor;
-    ctx.shadowBlur = 8;
     ctx.stroke();
     ctx.restore();
   });
@@ -99,33 +122,35 @@ export function drawCircleCanvas(
   }
 
   // 6. Draw Orbiting Users
-  // Ring 1 (Inner)
+  // Ring 1 (Inner: ~8 users)
   drawOrbitUsers(
     ctx,
     cx,
     cy,
     r1,
     data.innerRing,
-    settings.avatarSize * (minDim / 800) * 1.1,
+    settings.avatarSize * (minDim / 800) * 1.05,
     rotationAngle,
     theme,
-    settings.showHandles
+    settings.showHandles,
+    true // showLabels
   );
 
-  // Ring 2 (Middle - rotates opposite or slightly slower)
+  // Ring 2 (Middle: ~15 users)
   drawOrbitUsers(
     ctx,
     cx,
     cy,
     r2,
     data.middleRing,
-    settings.avatarSize * (minDim / 800) * 0.95,
+    settings.avatarSize * (minDim / 800) * 0.88,
     -rotationAngle * 0.65 + 0.5,
     theme,
-    settings.showHandles
+    settings.showHandles,
+    true // showLabels
   );
 
-  // Ring 3 (Outer)
+  // Ring 3 (Outer: ~24 users)
   if (settings.ringCount === 3 && data.outerRing.length > 0) {
     drawOrbitUsers(
       ctx,
@@ -133,10 +158,11 @@ export function drawCircleCanvas(
       cy,
       r3,
       data.outerRing,
-      settings.avatarSize * (minDim / 800) * 0.8,
+      settings.avatarSize * (minDim / 800) * 0.72,
       rotationAngle * 0.4 + 1.2,
       theme,
-      settings.showHandles
+      settings.showHandles,
+      false // on outer ring, omit handles or keep compact to prevent overlap
     );
   }
 
@@ -144,23 +170,14 @@ export function drawCircleCanvas(
   drawBranding(ctx, width, height, data, theme, settings);
 }
 
-// Draw starfield
+// Draw starfield (optimized, 0 trig calculations per frame)
 function drawStarfield(ctx: CanvasRenderingContext2D, width: number, height: number, theme: ThemeConfig) {
-  ctx.save();
-  const starCount = 80;
-  // Fixed deterministic positions based on index
-  for (let i = 0; i < starCount; i++) {
-    const x = ((Math.sin(i * 997) * 10000) % width + width) % width;
-    const y = ((Math.cos(i * 7919) * 10000) % height + height) % height;
-    const size = ((i % 3) + 1) * 0.8;
-    const alpha = ((i % 5) + 3) * 0.08;
-
-    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 255, 255, ${alpha})` : `${theme.glowColor}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`;
-    ctx.beginPath();
-    ctx.arc(x, y, size, 0, Math.PI * 2);
-    ctx.fill();
+  const stars = getStars(width, height);
+  for (let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 255, 255, ${s.alpha})` : `${theme.glowColor}33`;
+    ctx.fillRect(s.x, s.y, s.size, s.size);
   }
-  ctx.restore();
 }
 
 // Draw users on an orbit
@@ -173,7 +190,8 @@ function drawOrbitUsers(
   nodeRadius: number,
   baseAngle: number,
   theme: ThemeConfig,
-  showHandles: boolean
+  showHandles: boolean,
+  showLabelsOnRing: boolean = true
 ) {
   if (!users || users.length === 0) return;
   const count = users.length;
@@ -194,12 +212,12 @@ function drawOrbitUsers(
       `@${user.handle}`,
       theme,
       false,
-      showHandles
+      showHandles && showLabelsOnRing
     );
   });
 }
 
-// Draw single avatar with fallback to letter initials if image CORS blocks
+// Draw single avatar
 function drawAvatarNode(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -214,14 +232,14 @@ function drawAvatarNode(
 ) {
   ctx.save();
 
-  // Glow Halo
+  // Glow Halo (optimized)
   ctx.beginPath();
-  ctx.arc(x, y, radius + (isCenter ? 6 : 3), 0, Math.PI * 2);
+  ctx.arc(x, y, radius + (isCenter ? 5 : 2), 0, Math.PI * 2);
   ctx.fillStyle = isCenter ? `${theme.accentColor}44` : `${theme.glowColor}25`;
   ctx.fill();
 
   // Outer Border ring
-  ctx.lineWidth = isCenter ? 3.5 : 2;
+  ctx.lineWidth = isCenter ? 3 : 1.5;
   ctx.strokeStyle = isCenter ? theme.accentColor : theme.ringColors[0];
   ctx.stroke();
 
@@ -235,7 +253,7 @@ function drawAvatarNode(
   if (cachedImg && cachedImg !== 'failed' && cachedImg.complete && cachedImg.naturalWidth > 0) {
     ctx.drawImage(cachedImg, x - radius, y - radius, radius * 2, radius * 2);
   } else {
-    // Elegant fallback: gradient circle with initial letter
+    // Fallback: gradient circle with initial letter
     const initial = (name || handle || '?').replace('@', '').charAt(0).toUpperCase();
     const fallbackGrad = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
     fallbackGrad.addColorStop(0, theme.accentColor);
@@ -252,21 +270,22 @@ function drawAvatarNode(
 
   ctx.restore();
 
-  // Draw user handle under avatar
+  // Draw user handle under avatar (GPU-optimized: NO heavy shadowBlur!)
   if (showHandles && !isCenter && radius > 14) {
     ctx.save();
-    ctx.font = `500 ${Math.max(9, Math.round(radius * 0.45))}px system-ui, -apple-system, sans-serif`;
+    ctx.font = `600 ${Math.max(9, Math.round(radius * 0.42))}px system-ui, -apple-system, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    // Label shadow for legibility
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1;
+    const displayHandle = handle.length > 11 ? handle.substring(0, 10) + '…' : handle;
+
+    // Stroke text for crisp contrast without CPU-killing shadow blur
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(displayHandle, x, y + radius + 3);
 
     ctx.fillStyle = theme.textColor;
-    const displayHandle = handle.length > 12 ? handle.substring(0, 11) + '…' : handle;
-    ctx.fillText(displayHandle, x, y + radius + 4);
+    ctx.fillText(displayHandle, x, y + radius + 3);
     ctx.restore();
   }
 }
@@ -283,10 +302,8 @@ function drawBranding(
   ctx.save();
 
   // Top Left: Brand Header
-  ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+  ctx.font = 'bold 20px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = theme.textColor;
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
-  ctx.shadowBlur = 6;
   ctx.fillText('OpenXCircle', 32, 42);
 
   ctx.font = '13px system-ui, sans-serif';
