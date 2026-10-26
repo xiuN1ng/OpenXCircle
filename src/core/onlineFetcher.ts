@@ -49,7 +49,6 @@ interface WorkerApiResponse {
   profileLikes?: number;
 }
 
-// Configured Cloudflare Worker endpoint
 const PROXY_ENDPOINT = 'https://openxcircle-proxy.xiuningkou.workers.dev';
 
 export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
@@ -58,7 +57,7 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     throw new Error('请输入有效的 X 用户名');
   }
 
-  // 1. Fetch real target profile from FxTwitter API for rich bio & exact display name
+  // 1. Fetch real target profile from FxTwitter API for bio & exact name
   let fxProfile: FxTwitterUser | null = null;
   try {
     const fxResp = await fetch(`https://api.fxtwitter.com/${cleanHandle}`, {
@@ -92,10 +91,8 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
   const targetsFromYou = rawData.aggregates?.targetsFromYou || {};
 
   let mutualCount = 0;
-  let fanCount = 0;
-  let admireCount = 0;
 
-  // Transform raw circleUsers to UserNode
+  // Transform raw circleUsers to UserNode with reliable proxied avatar URLs
   const scoredUsers: UserNode[] = rawData.circleUsers.map((u, i) => {
     const toYou = authorsToYou[u.screenName.toLowerCase()] || 0;
     const fromYou = targetsFromYou[u.screenName.toLowerCase()] || 0;
@@ -106,10 +103,8 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
       mutualCount += 1;
     } else if (toYou > fromYou) {
       relationship = 'fan';
-      fanCount += 1;
     } else {
       relationship = 'admire';
-      admireCount += 1;
     }
 
     const badges: string[] = [];
@@ -128,9 +123,11 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     const ring = (i < 6 ? 1 : i < 18 ? 2 : 3) as 1 | 2 | 3;
     const rank = (i < 6 ? 'S' : i < 18 ? 'A' : i < 35 ? 'B' : 'C') as 'S' | 'A' | 'B' | 'C';
 
-    const avatar =
-      u.avatarUrl ||
-      `https://unavatar.io/x/${u.screenName}`;
+    // Prioritize avatarUrlPreview provided by Yahoo search, and proxy through Worker for CORS
+    const rawAvatar = u.avatarUrl || u.avatarUrlPreview;
+    const avatar = rawAvatar
+      ? `${PROXY_ENDPOINT}/?avatar=${encodeURIComponent(rawAvatar)}`
+      : `https://api.dicebear.com/7.x/identicon/svg?seed=${u.screenName}`;
 
     return {
       id: u.id || `real-${i}-${u.screenName}`,
@@ -165,10 +162,11 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     : 70;
 
   const targetName = fxProfile?.name || cleanHandle;
-  const targetAvatar =
-    rawData.selfAvatarUrl ||
-    fxProfile?.avatar_url ||
-    `https://unavatar.io/x/${cleanHandle}`;
+  const rawTargetAvatar = rawData.selfAvatarUrl || fxProfile?.avatar_url;
+  const targetAvatar = rawTargetAvatar
+    ? `${PROXY_ENDPOINT}/?avatar=${encodeURIComponent(rawTargetAvatar)}`
+    : `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanHandle}`;
+
   const targetBio = fxProfile?.description || `@${cleanHandle} 的 X 真实互动社交全景`;
 
   return {

@@ -22,14 +22,6 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
 
   const theme = THEMES[settings.theme] || THEMES.cosmic;
 
-  // Preload avatars
-  useEffect(() => {
-    preloadImage(data.targetUser.avatar);
-    data.innerRing.forEach((u) => preloadImage(u.avatar));
-    data.middleRing.forEach((u) => preloadImage(u.avatar));
-    data.outerRing.forEach((u) => preloadImage(u.avatar));
-  }, [data]);
-
   // Render function
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -37,7 +29,6 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Use high resolution for crisp rendering
     const size = 1000;
     if (canvas.width !== size || canvas.height !== size) {
       canvas.width = size;
@@ -46,6 +37,29 @@ export const OrbitView: React.FC<OrbitViewProps> = ({
 
     drawCircleCanvas(ctx, size, size, data, theme, settings, rotationAngle);
   }, [data, theme, settings, rotationAngle]);
+
+  // Preload avatars and trigger re-render as each avatar finishes downloading
+  useEffect(() => {
+    let active = true;
+    const urls = [
+      data.targetUser.avatar,
+      ...data.innerRing.map((u) => u.avatar),
+      ...data.middleRing.map((u) => u.avatar),
+      ...data.outerRing.map((u) => u.avatar),
+    ].filter(Boolean);
+
+    urls.forEach((url) => {
+      preloadImage(url).then((img) => {
+        if (img && active) {
+          render();
+        }
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [data, render]);
 
   // Animation loop
   useEffect(() => {
