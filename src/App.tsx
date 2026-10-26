@@ -30,7 +30,7 @@ export function App() {
     ringCount: 3,
     avatarSize: 38,
     rotationSpeed: 1,
-    viewMode: 'orbit',
+    viewMode: 'galaxy3d',
     exportScale: 2,
   });
 

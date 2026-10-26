@@ -1,7 +1,22 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Play, Pause, RotateCcw, Sparkles, Compass } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  Sparkles,
+  Compass,
+  ExternalLink,
+  X,
+  Target,
+  Maximize2,
+  Minimize2,
+  MessageCircle,
+  Repeat,
+  Quote,
+  Zap,
+} from 'lucide-react';
 import type { CircleData, UserNode } from '../types';
 
 interface Galaxy3DViewProps {
@@ -14,21 +29,35 @@ interface PlanetNodeRef {
   sprite: THREE.Sprite;
   user: UserNode;
   baseScale: number;
+  radius: number;
+  initialAngle: number;
 }
 
 export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }) => {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(0.8); // Default to calm, majestic pace
-  const [hoveredUser, setHoveredUser] = useState<UserNode | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // States
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(0.8);
+  const [hoveredUser, setHoveredUser] = useState<UserNode | null>(null);
+  const [selectedPlanetUser, setSelectedPlanetUser] = useState<UserNode | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Three.js References
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
+  // Cinematic Camera Glide State
+  const cameraTargetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 180, 250));
+  const controlsTargetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
+  const isCinematicMovingRef = useRef<boolean>(false);
+
+  // Groups & Objects
   const innerOrbitGroupRef = useRef<THREE.Group | null>(null);
   const middleOrbitGroupRef = useRef<THREE.Group | null>(null);
   const outerOrbitGroupRef = useRef<THREE.Group | null>(null);
@@ -37,8 +66,56 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const clickableSpritesRef = useRef<Map<THREE.Sprite, UserNode>>(new Map());
   const hoveredSpriteRef = useRef<THREE.Sprite | null>(null);
 
+  // Procedural Star Texture Generator for Real Optical Blooming Stars
+  const createStarTexture = (): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+
+    // Radial Gaussian falloff
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grad.addColorStop(0.12, 'rgba(255, 255, 255, 0.95)');
+    grad.addColorStop(0.35, 'rgba(186, 230, 253, 0.55)');
+    grad.addColorStop(0.65, 'rgba(99, 102, 241, 0.18)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+
+    // Subtle 4-point optical diffraction starburst flare
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(32, 6); ctx.lineTo(32, 58);
+    ctx.moveTo(6, 32); ctx.lineTo(58, 32);
+    ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
+  // Procedural Volumetric Nebula Cloud Texture
+  const createNebulaTexture = (): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    grad.addColorStop(0.25, 'rgba(192, 132, 252, 0.45)');
+    grad.addColorStop(0.55, 'rgba(79, 70, 229, 0.18)');
+    grad.addColorStop(0.85, 'rgba(6, 182, 212, 0.05)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
   // High-definition 512x512 billboard canvas texture generator
-  // 100% unobstructed, ultra-crisp avatar display
   const createPlanetSpriteTexture = (
     avatarUrl: string,
     name: string,
@@ -61,7 +138,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
     const glowColor =
       rank === 'SUN'
-        ? 'rgba(251, 191, 36, 0.7)'
+        ? 'rgba(251, 191, 36, 0.75)'
         : rank === 'S'
         ? 'rgba(245, 158, 11, 0.65)'
         : rank === 'A'
@@ -72,7 +149,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       ctx.clearRect(0, 0, 512, 512);
 
       const cx = 256;
-      const cy = 224; // elevated center to leave space for handle pill below
+      const cy = 224;
       const r = 168;
 
       // 1. Soft Cosmic Atmosphere Glow
@@ -100,7 +177,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         ctx.drawImage(loadedImg, cx - (r - 6), cy - (r - 6), (r - 6) * 2, (r - 6) * 2);
         ctx.restore();
       } else {
-        // High-tech cyber gradient fallback
         const grad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
         grad.addColorStop(0, borderColor);
         grad.addColorStop(1, '#0f172a');
@@ -109,7 +185,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
         ctx.fill();
 
-        // Initial letter
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 144px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
@@ -132,7 +207,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       ctx.arc(cx, cy, r - 5, -Math.PI * 0.78, -Math.PI * 0.15);
       ctx.stroke();
 
-      // 6. Handle Pill at Bottom (Dark semi-transparent capsule)
+      // 6. Handle Pill at Bottom
       const cleanHandle = handle.length > 12 ? handle.substring(0, 11) + '…' : handle;
       ctx.font = '600 30px system-ui, -apple-system, sans-serif';
       const textWidth = ctx.measureText(`@${cleanHandle}`).width;
@@ -149,7 +224,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       ctx.fill();
       ctx.stroke();
 
-      // Pill Text
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -197,20 +271,20 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     if (!mount) return;
 
     const width = mount.clientWidth || 800;
-    const height = mount.clientHeight || 650;
+    const height = mount.clientHeight || 700;
 
-    // 1. Scene & Space Depth Fog
+    // 1. Scene & Deep Space Fog
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.FogExp2(0x02040d, 0.0006);
+    scene.fog = new THREE.FogExp2(0x020308, 0.0005);
 
-    // 2. Camera: Isometric Cinematic View
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 3000);
+    // 2. Perspective Camera (Comfortable 3D isometric overview)
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 4000);
     camera.position.set(0, 180, 250);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // 3. WebGL Renderer
+    // 3. WebGL Renderer with High-Precision Tone Mapping
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -218,9 +292,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x02040d, 1);
+    renderer.setClearColor(0x020308, 1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.2;
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -228,27 +302,32 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 90;
-    controls.maxDistance = 600;
+    controls.minDistance = 60;
+    controls.maxDistance = 750;
     controls.maxPolarAngle = Math.PI / 2 + 0.35;
     controlsRef.current = controls;
 
     // 5. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.3);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.PointLight(0xfbbf24, 4, 900);
+    const sunLight = new THREE.PointLight(0xfbbf24, 4.5, 1000);
     sunLight.position.set(0, 0, 0);
     scene.add(sunLight);
 
-    // 6. Deep Space: 3,500 Twinkling Multi-color Stars
+    const blueSpaceLight = new THREE.PointLight(0x38bdf8, 2, 800);
+    blueSpaceLight.position.set(0, 150, 0);
+    scene.add(blueSpaceLight);
+
+    // 6. Deep Cosmos: 4,000 Optical Blooming Star Particles
+    const starTexture = createStarTexture();
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 3500;
+    const starCount = 4000;
     const starPos = new Float32Array(starCount * 3);
     const starCols = new Float32Array(starCount * 3);
 
     for (let i = 0; i < starCount; i++) {
-      const r = 300 + Math.random() * 1100;
+      const r = 260 + Math.random() * 1300;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
 
@@ -256,15 +335,15 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       starPos[i * 3 + 2] = r * Math.cos(phi);
 
-      const colorDice = Math.random();
-      if (colorDice > 0.75) {
-        starCols[i * 3] = 0.4; starCols[i * 3 + 1] = 0.75; starCols[i * 3 + 2] = 1.0;
-      } else if (colorDice > 0.5) {
-        starCols[i * 3] = 0.85; starCols[i * 3 + 1] = 0.55; starCols[i * 3 + 2] = 1.0;
-      } else if (colorDice > 0.3) {
-        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 0.85; starCols[i * 3 + 2] = 0.4;
+      const dice = Math.random();
+      if (dice > 0.75) {
+        starCols[i * 3] = 0.55; starCols[i * 3 + 1] = 0.85; starCols[i * 3 + 2] = 1.0; // Sirius Blue
+      } else if (dice > 0.5) {
+        starCols[i * 3] = 0.9; starCols[i * 3 + 1] = 0.6; starCols[i * 3 + 2] = 1.0; // Nebula Violet
+      } else if (dice > 0.3) {
+        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 0.88; starCols[i * 3 + 2] = 0.45; // Betelgeuse Gold
       } else {
-        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 1.0; starCols[i * 3 + 2] = 1.0;
+        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 1.0; starCols[i * 3 + 2] = 1.0; // Vega White
       }
     }
 
@@ -272,77 +351,120 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     starGeo.setAttribute('color', new THREE.BufferAttribute(starCols, 3));
 
     const starMat = new THREE.PointsMaterial({
-      size: 2.2,
+      size: 4.2,
+      map: starTexture,
       vertexColors: true,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
     const starField = new THREE.Points(starGeo, starMat);
     scene.add(starField);
 
-    // 7. Volumetric Nebula Particles along Galactic Plane
+    // 7. Volumetric Milky Way Nebula Dust Lane (Inclined 22°)
+    const nebulaTexture = createNebulaTexture();
     const nebulaGeo = new THREE.BufferGeometry();
-    const nebulaCount = 500;
+    const nebulaCount = 650;
     const nebPos = new Float32Array(nebulaCount * 3);
     const nebCols = new Float32Array(nebulaCount * 3);
 
     for (let i = 0; i < nebulaCount; i++) {
-      const dist = 70 + Math.random() * 320;
+      const dist = 60 + Math.random() * 380;
       const ang = Math.random() * Math.PI * 2;
-      const yOffset = (Math.random() - 0.5) * 35;
+      // Tilted plane equation
+      const x = Math.cos(ang) * dist;
+      const z = Math.sin(ang) * dist;
+      const y = x * 0.22 + (Math.random() - 0.5) * 45;
 
-      nebPos[i * 3] = Math.cos(ang) * dist;
-      nebPos[i * 3 + 1] = yOffset;
-      nebPos[i * 3 + 2] = Math.sin(ang) * dist;
+      nebPos[i * 3] = x;
+      nebPos[i * 3 + 1] = y;
+      nebPos[i * 3 + 2] = z;
 
-      nebCols[i * 3] = 0.45;
-      nebCols[i * 3 + 1] = 0.3;
-      nebCols[i * 3 + 2] = 0.95;
+      const cMix = Math.random();
+      if (cMix > 0.5) {
+        nebCols[i * 3] = 0.45; nebCols[i * 3 + 1] = 0.25; nebCols[i * 3 + 2] = 0.95; // Indigo dust
+      } else {
+        nebCols[i * 3] = 0.15; nebCols[i * 3 + 1] = 0.65; nebCols[i * 3 + 2] = 0.85; // Cyan dust
+      }
     }
 
     nebulaGeo.setAttribute('position', new THREE.BufferAttribute(nebPos, 3));
     nebulaGeo.setAttribute('color', new THREE.BufferAttribute(nebCols, 3));
     const nebulaMat = new THREE.PointsMaterial({
-      size: 4.5,
+      size: 16.0,
+      map: nebulaTexture,
       vertexColors: true,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
     const nebulaField = new THREE.Points(nebulaGeo, nebulaMat);
     scene.add(nebulaField);
+
+    // 8. Cosmic Shooting Star System (流星系统)
+    const shootingStarGeo = new THREE.BufferGeometry();
+    const shootingStarPoints = new Float32Array(6); // 2 vertices
+    shootingStarGeo.setAttribute('position', new THREE.BufferAttribute(shootingStarPoints, 3));
+    const shootingStarMat = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+    });
+    const shootingStarLine = new THREE.Line(shootingStarGeo, shootingStarMat);
+    scene.add(shootingStarLine);
+
+    let shootingStarActive = false;
+    let shootingStarProgress = 0;
+    const shootingStarStart = new THREE.Vector3();
+    const shootingStarEnd = new THREE.Vector3();
+
+    const triggerShootingStar = () => {
+      shootingStarActive = true;
+      shootingStarProgress = 0;
+      const startX = (Math.random() - 0.5) * 600;
+      const startY = 150 + Math.random() * 150;
+      const startZ = (Math.random() - 0.5) * 600;
+      shootingStarStart.set(startX, startY, startZ);
+      shootingStarEnd.set(startX - 180, startY - 90, startZ - 140);
+    };
 
     // Clean tracking refs
     planetNodesRef.current = [];
     clickableSpritesRef.current.clear();
 
-    // 8. Central Sun (Target User Core Star - 100% UNOBSTRUCTED!)
+    // 9. Central Sun (Target User Core Star)
     const sunGroup = new THREE.Group();
     scene.add(sunGroup);
 
-    // Dynamic Solar Corona Rings (outer radius larger than avatar, circling AROUND avatar without covering it!)
+    // Dynamic Solar Corona Rings
     const coronaGeo1 = new THREE.RingGeometry(24, 34, 48);
     const coronaMat1 = new THREE.MeshBasicMaterial({
       color: 0xfbbf24,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.5,
       side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
     });
     const corona1 = new THREE.Mesh(coronaGeo1, coronaMat1);
     corona1.rotation.x = Math.PI / 2;
     sunGroup.add(corona1);
 
-    const coronaGeo2 = new THREE.RingGeometry(30, 42, 48);
+    const coronaGeo2 = new THREE.RingGeometry(30, 44, 48);
     const coronaMat2 = new THREE.MeshBasicMaterial({
-      color: 0x6366f1,
+      color: 0x818cf8,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.35,
       side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
     });
     const corona2 = new THREE.Mesh(coronaGeo2, coronaMat2);
     corona2.rotation.x = Math.PI / 2 + 0.18;
     sunGroup.add(corona2);
 
-    // Target User Avatar Billboard Sprite (Always faces camera, renderOrder = 100)
+    // Target User Avatar Billboard Sprite
     const targetUserNode: UserNode = {
       id: 'sun-center',
       name: data.targetUser.name,
@@ -378,7 +500,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const sunScale = 40;
     sunSprite.scale.set(sunScale, sunScale, 1);
     sunSprite.position.set(0, 0, 0);
-    sunSprite.renderOrder = 100; // ensure never obscured
+    sunSprite.renderOrder = 100;
     sunGroup.add(sunSprite);
 
     clickableSpritesRef.current.set(sunSprite, targetUserNode);
@@ -387,14 +509,15 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       sprite: sunSprite,
       user: targetUserNode,
       baseScale: sunScale,
+      radius: 0,
+      initialAngle: 0,
     });
 
-    // 9. Planetary Orbital Rings & Systems
+    // 10. Planetary Systems & Luminous Orbit Stardust Streams
     const orbitRadii = [82, 148, 218];
     const ringUsers = [data.innerRing, data.middleRing, data.outerRing];
     const ringColors = [0xf59e0b, 0xa855f7, 0x06b6d4];
 
-    // Groups for independent orbital speeds (Kepler's Law)
     const innerGroup = new THREE.Group();
     const middleGroup = new THREE.Group();
     const outerGroup = new THREE.Group();
@@ -409,10 +532,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
     const orbitGroups = [innerGroup, middleGroup, outerGroup];
 
+    // Array to track orbital flowing stardust particles
+    const orbitParticlesList: { points: THREE.Points; radius: number; speed: number }[] = [];
+
     orbitRadii.forEach((radius, ringIdx) => {
       const parentGroup = orbitGroups[ringIdx];
 
-      // 3D Orbital Track Ring (Luminous circle on horizontal plane)
+      // 10a. 3D Glowing Orbit Line Loop
       const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
       const points = curve.getPoints(120);
       const orbitGeo = new THREE.BufferGeometry().setFromPoints(
@@ -421,12 +547,41 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       const orbitMat = new THREE.LineBasicMaterial({
         color: ringColors[ringIdx],
         transparent: true,
-        opacity: 0.38,
+        opacity: 0.35,
+        blending: THREE.AdditiveBlending,
       });
       const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
       scene.add(orbitLine);
 
-      // Users on this orbit
+      // 10b. Living Orbital Stardust Stream (Flowing particles along orbit)
+      const particleCount = 80;
+      const partGeo = new THREE.BufferGeometry();
+      const partPos = new Float32Array(particleCount * 3);
+      for (let p = 0; p < particleCount; p++) {
+        const pAngle = (p / particleCount) * Math.PI * 2;
+        partPos[p * 3] = Math.cos(pAngle) * radius;
+        partPos[p * 3 + 1] = 0;
+        partPos[p * 3 + 2] = Math.sin(pAngle) * radius;
+      }
+      partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+      const partMat = new THREE.PointsMaterial({
+        size: 3.5,
+        map: starTexture,
+        color: ringColors[ringIdx],
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const orbitPoints = new THREE.Points(partGeo, partMat);
+      parentGroup.add(orbitPoints);
+      orbitParticlesList.push({
+        points: orbitPoints,
+        radius,
+        speed: ringIdx === 0 ? 0.0006 : ringIdx === 1 ? 0.0004 : 0.00025,
+      });
+
+      // 10c. Orbiting Planets
       const users = ringUsers[ringIdx] || [];
       const count = users.length;
       if (count === 0) return;
@@ -439,25 +594,24 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
 
-        // Individual Planet Container at (x, 0, z)
         const planetSystem = new THREE.Group();
         planetSystem.position.set(x, 0, z);
         parentGroup.add(planetSystem);
 
-        // 1. Orbital Beacon Ring on Orbit Plane (y = 0)
-        // Marks celestial orbit location without touching avatar
+        // Grounding Beacon Ring on orbit plane (y = 0)
         const beaconGeo = new THREE.RingGeometry(2.5, 4.2, 24);
         const beaconMat = new THREE.MeshBasicMaterial({
           color: ringColors[ringIdx],
           transparent: true,
-          opacity: 0.5,
+          opacity: 0.55,
           side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
         });
         const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
         beaconMesh.rotation.x = Math.PI / 2;
         planetSystem.add(beaconMesh);
 
-        // 2. Vertical Sci-Fi Light Beam connecting orbit line to floating planet
+        // Vertical Gravity Tether Light Beam
         const beamGeo = new THREE.BufferGeometry().setFromPoints([
           new THREE.Vector3(0, 0, 0),
           new THREE.Vector3(0, 5, 0),
@@ -465,12 +619,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         const beamMat = new THREE.LineBasicMaterial({
           color: ringColors[ringIdx],
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.4,
+          blending: THREE.AdditiveBlending,
         });
         const beamLine = new THREE.Line(beamGeo, beamMat);
         planetSystem.add(beamLine);
 
-        // 3. Avatar Billboard Sprite (Elevated at y = 5, 100% UNOBSTRUCTED!)
+        // Avatar Billboard Sprite (Elevated at y = 5, 100% Unobstructed)
         const texture = createPlanetSpriteTexture(user.avatar, user.name, user.handle, user.rank);
         const spriteMat = new THREE.SpriteMaterial({
           map: texture,
@@ -480,39 +635,90 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         });
         const sprite = new THREE.Sprite(spriteMat);
         sprite.scale.set(spriteScale, spriteScale, 1);
-        sprite.position.set(0, 5, 0); // floats cleanly above orbit plane
-        sprite.renderOrder = 100; // strictly on top, never clipped!
+        sprite.position.set(0, 5, 0);
+        sprite.renderOrder = 100;
         planetSystem.add(sprite);
 
-        // Save reference for raycasting and hover animation
         clickableSpritesRef.current.set(sprite, user);
         planetNodesRef.current.push({
           group: planetSystem,
           sprite,
           user,
           baseScale: spriteScale,
+          radius,
+          initialAngle: angle,
         });
       });
     });
 
-    // 10. Animation Loop with Gentle Keplerian Revolution & Smart Hover Slowdown
-    // BASE_SPEED is calibrated to be graceful, calm, and majestic (previously 0.0028, now 0.0006)
+    // 11. Animation Loop with Breathing Simulation & Cinematic LERP
     const BASE_SPEED = 0.0006;
+    let clock = 0;
+    let nextShootingStarTime = 120; // in frames
 
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate);
+      clock += 0.02;
 
       controls.update();
 
-      // Slow celestial drift
-      starField.rotation.y += 0.0001;
-      nebulaField.rotation.y -= 0.00015;
+      // Cinematic Camera Glide to Target
+      if (isCinematicMovingRef.current) {
+        camera.position.lerp(cameraTargetPosRef.current, 0.05);
+        controls.target.lerp(controlsTargetPosRef.current, 0.05);
 
-      // Sun corona spin
-      corona1.rotation.z += 0.0025;
-      corona2.rotation.z -= 0.0018;
+        if (
+          camera.position.distanceTo(cameraTargetPosRef.current) < 1.0 &&
+          controls.target.distanceTo(controlsTargetPosRef.current) < 1.0
+        ) {
+          isCinematicMovingRef.current = false;
+        }
+      }
 
-      // Smart Speed: When user hovers a planet, auto-slow down to 0.05x for effortless inspection & clicking!
+      // Slow deep-space celestial drift
+      starField.rotation.y += 0.00008;
+      nebulaField.rotation.y -= 0.00012;
+
+      // Solar Corona pulsation & rotation
+      corona1.rotation.z += 0.003;
+      corona2.rotation.z -= 0.0022;
+      const coronaScale = 1.0 + Math.sin(clock * 1.5) * 0.04;
+      corona1.scale.set(coronaScale, coronaScale, 1);
+
+      // Shooting Star Animation
+      nextShootingStarTime--;
+      if (nextShootingStarTime <= 0 && !shootingStarActive) {
+        triggerShootingStar();
+        nextShootingStarTime = 180 + Math.floor(Math.random() * 240); // 3-7s
+      }
+
+      if (shootingStarActive) {
+        shootingStarProgress += 0.035;
+        const head = new THREE.Vector3().lerpVectors(
+          shootingStarStart,
+          shootingStarEnd,
+          shootingStarProgress
+        );
+        const tail = new THREE.Vector3().lerpVectors(
+          shootingStarStart,
+          shootingStarEnd,
+          Math.max(0, shootingStarProgress - 0.25)
+        );
+
+        const posAttr = shootingStarGeo.attributes.position as THREE.BufferAttribute;
+        posAttr.setXYZ(0, head.x, head.y, head.z);
+        posAttr.setXYZ(1, tail.x, tail.y, tail.z);
+        posAttr.needsUpdate = true;
+
+        shootingStarMat.opacity = Math.sin(shootingStarProgress * Math.PI) * 0.9;
+
+        if (shootingStarProgress >= 1.0) {
+          shootingStarActive = false;
+          shootingStarMat.opacity = 0;
+        }
+      }
+
+      // Smart Speed: Slow down when hovering for effortless interaction
       const isHovering = hoveredSpriteRef.current !== null;
       const currentSpeed = isHovering
         ? BASE_SPEED * 0.05
@@ -538,7 +744,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
     animate();
 
-    // 11. Window Resize
     const handleResize = () => {
       if (!mount) return;
       const w = mount.clientWidth;
@@ -601,27 +806,65 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     }
   };
 
+  // Fly Camera smoothly to target planet
+  const flyToUser = (user: UserNode) => {
+    const node = planetNodesRef.current.find((n) => n.user.id === user.id);
+    if (!node) return;
+
+    const worldPos = new THREE.Vector3();
+    node.sprite.getWorldPosition(worldPos);
+
+    controlsTargetPosRef.current.copy(worldPos);
+    cameraTargetPosRef.current.set(worldPos.x, worldPos.y + 25, worldPos.z + 45);
+    isCinematicMovingRef.current = true;
+  };
+
+  // Reset Camera to Galaxy Overview
+  const handleResetCamera = () => {
+    controlsTargetPosRef.current.set(0, 0, 0);
+    cameraTargetPosRef.current.set(0, 180, 250);
+    isCinematicMovingRef.current = true;
+    setSelectedPlanetUser(null);
+  };
+
+  // Click handler
   const handleClick = (e: React.MouseEvent) => {
     const sprite = getIntersectedSprite(e.clientX, e.clientY);
     if (sprite) {
       const user = clickableSpritesRef.current.get(sprite);
       if (user) {
+        setSelectedPlanetUser(user);
+        flyToUser(user);
         onSelectUser(user);
       }
     }
   };
 
-  const handleResetCamera = () => {
-    if (cameraRef.current && controlsRef.current) {
-      cameraRef.current.position.set(0, 180, 250);
-      controlsRef.current.target.set(0, 0, 0);
-      controlsRef.current.update();
+  // Fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
     }
   };
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto p-2 sm:p-4 animate-fade-in select-none">
-      <div className="relative w-full h-[580px] sm:h-[680px] rounded-3xl overflow-hidden shadow-2xl shadow-indigo-950/70 border border-slate-800/80 bg-slate-950 group">
+    <div
+      ref={containerRef}
+      className={`relative w-full mx-auto select-none transition-all ${
+        isFullscreen ? 'fixed inset-0 z-50 p-0 bg-slate-950' : 'max-w-7xl p-2 sm:p-4'
+      }`}
+    >
+      {/* 3D Viewport Frame */}
+      <div
+        className={`relative w-full rounded-3xl overflow-hidden shadow-2xl shadow-indigo-950/80 border border-slate-800/80 bg-slate-950 group ${
+          isFullscreen ? 'h-screen rounded-none border-none' : 'h-[620px] sm:h-[740px]'
+        }`}
+      >
         {/* Three.js Canvas */}
         <div
           ref={mountRef}
@@ -630,76 +873,237 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           className="w-full h-full cursor-grab active:cursor-grabbing"
         />
 
-        {/* Top Info Pill */}
-        <div className="absolute top-4 left-4 flex items-center gap-2.5 bg-slate-900/85 backdrop-blur-md px-3.5 py-1.5 rounded-2xl border border-slate-800 shadow-xl pointer-events-none">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-medium text-slate-300">
-            3D 实时宇宙星系 · 共 <span className="text-white font-bold">{data.innerRing.length + data.middleRing.length + data.outerRing.length}</span> 颗社交星球
-          </span>
+        {/* 1. Top Minimalist Command HUD: Concise High-Efficiency Galaxy Status */}
+        <div className="absolute top-4 left-4 flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl px-4 py-2 rounded-2xl border border-slate-800/90 shadow-2xl pointer-events-none">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
+            </span>
+            <span className="text-xs font-semibold text-slate-200">
+              {data.targetUser.name} 的引力星系
+            </span>
+          </div>
+
+          <div className="h-3.5 w-px bg-slate-800" />
+
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span>
+              星球 <span className="font-bold text-white">{data.innerRing.length + data.middleRing.length + data.outerRing.length}</span> 颗
+            </span>
+            <span>
+              总互动 <span className="font-bold text-indigo-300">{data.stats.totalInteractions.toLocaleString()}</span> 次
+            </span>
+            <span className="hidden md:inline">
+              双向率 <span className="font-bold text-emerald-400">{data.stats.mutualRatio}%</span>
+            </span>
+          </div>
+
           {hoveredUser && (
-            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30 animate-pulse">
               悬停减速中
             </span>
           )}
         </div>
 
-        {/* Floating Holographic Tooltip on Planet Hover */}
-        {hoveredUser && (
+        {/* 2. Top-Right Cosmic Compass Hint */}
+        <div className="absolute top-4 right-4 hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-slate-800/70 pointer-events-none shadow-lg">
+          <Compass className="w-3.5 h-3.5 text-indigo-400 animate-spin-slow" />
+          <span>拖拽 360° 运镜 · 滚轮缩放 · 点击星球聚焦</span>
+        </div>
+
+        {/* 3. Floating Hover Tooltip (Quick preview on hover) */}
+        {hoveredUser && !selectedPlanetUser && (
           <div
-            className="absolute z-30 pointer-events-none transition-transform duration-75 ease-out"
+            className="absolute z-20 pointer-events-none transition-transform duration-75 ease-out"
             style={{
               left: `${tooltipPos.x + 18}px`,
               top: `${tooltipPos.y - 24}px`,
             }}
           >
-            <div className="bg-slate-900/95 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-3 shadow-2xl shadow-indigo-950/80 max-w-[260px] animate-fade-in">
-              <div className="flex items-center gap-3">
+            <div className="bg-slate-900/95 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-3 shadow-2xl shadow-indigo-950/80 max-w-[240px] animate-fade-in">
+              <div className="flex items-center gap-2.5">
                 <img
                   src={hoveredUser.avatar}
                   alt={hoveredUser.name}
-                  className="w-10 h-10 rounded-full object-cover border-2 border-indigo-400/60 bg-slate-800 shrink-0"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
+                  className="w-9 h-9 rounded-full object-cover border border-indigo-400/60 bg-slate-800 shrink-0"
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-white truncate">{hoveredUser.name}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-black ${
-                        hoveredUser.rank === 'S'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : hoveredUser.rank === 'A'
-                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                          : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                      }`}
-                    >
-                      {hoveredUser.rank} 阶
+                    <span className="text-xs font-bold text-white truncate">{hoveredUser.name}</span>
+                    <span className="text-[10px] px-1 py-0.2 rounded font-black bg-indigo-500/20 text-indigo-300">
+                      {hoveredUser.rank}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 truncate">@{hoveredUser.handle}</p>
+                  <p className="text-[11px] text-slate-400 truncate">@{hoveredUser.handle}</p>
                 </div>
               </div>
-
-              <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
-                <span className="text-indigo-300 font-medium">
-                  {hoveredUser.badges[0] || '互动星球'}
-                </span>
-                <span className="text-slate-400">
-                  互动 <span className="text-white font-bold">{hoveredUser.interactions.total}</span> 次
-                </span>
-              </div>
-
-              <div className="mt-1.5 text-[10px] text-indigo-400/90 text-center font-medium flex items-center justify-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                点击探索星象档案
+              <div className="mt-2 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
+                <span className="text-indigo-300">{hoveredUser.badges[0] || '社交行星'}</span>
+                <span>{hoveredUser.interactions.total} 次互动</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Orbit Legend (Bottom Left) */}
-        <div className="absolute bottom-4 left-4 hidden sm:flex items-center gap-3 bg-slate-900/85 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-800 shadow-xl pointer-events-none text-xs text-slate-400">
+        {/* 4. Slide-out Cosmic Telemetry HUD Card (Concise, high-efficiency planet details without blocking universe!) */}
+        {selectedPlanetUser && (
+          <div className="absolute top-4 bottom-20 right-4 z-30 w-full max-w-[320px] sm:max-w-[340px] animate-slide-left pointer-events-auto">
+            <div className="h-full bg-slate-900/90 backdrop-blur-2xl border border-indigo-500/40 rounded-3xl p-5 shadow-2xl shadow-indigo-950/90 flex flex-col justify-between overflow-y-auto">
+              <div>
+                {/* Header with Close */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <span
+                    className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 ${
+                      selectedPlanetUser.rank === 'S'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : selectedPlanetUser.rank === 'A'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                        : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    {selectedPlanetUser.rank === 'S'
+                      ? '核心引力圈 (S 阶)'
+                      : selectedPlanetUser.rank === 'A'
+                      ? '活跃同频轨道 (A 阶)'
+                      : '外围星云 (B 阶)'}
+                  </span>
+
+                  <button
+                    onClick={() => {
+                      setSelectedPlanetUser(null);
+                      handleResetCamera();
+                    }}
+                    className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Planet Profile */}
+                <div className="mt-4 flex items-center gap-3.5">
+                  <div className="relative">
+                    <img
+                      src={selectedPlanetUser.avatar}
+                      alt={selectedPlanetUser.name}
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-indigo-400/60 shadow-lg shadow-indigo-500/20 bg-slate-800"
+                    />
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-slate-900" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-bold text-white truncate">
+                      {selectedPlanetUser.name}
+                    </h3>
+                    <p className="text-xs text-indigo-300 font-mono">@{selectedPlanetUser.handle}</p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-300 font-medium">
+                        {selectedPlanetUser.relationship === 'mutual'
+                          ? '✨ 双向奔赴'
+                          : selectedPlanetUser.relationship === 'fan'
+                          ? '🛡️ 死忠守护'
+                          : '👁️ 重点关注'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Concise High-Efficiency Metrics Grid (2x2) */}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+                      <MessageCircle className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>回复互动</span>
+                    </div>
+                    <span className="text-lg font-black text-white">
+                      {selectedPlanetUser.interactions.replies}
+                    </span>
+                    <span className="text-[10px] text-slate-500 ml-1">次</span>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+                      <Repeat className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>转推传播</span>
+                    </div>
+                    <span className="text-lg font-black text-white">
+                      {selectedPlanetUser.interactions.retweets}
+                    </span>
+                    <span className="text-[10px] text-slate-500 ml-1">次</span>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+                      <Quote className="w-3.5 h-3.5 text-purple-400" />
+                      <span>引用探讨</span>
+                    </div>
+                    <span className="text-lg font-black text-white">
+                      {selectedPlanetUser.interactions.quotes}
+                    </span>
+                    <span className="text-[10px] text-slate-500 ml-1">次</span>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span>综合引力分</span>
+                    </div>
+                    <span className="text-lg font-black text-amber-300">
+                      {selectedPlanetUser.score}
+                    </span>
+                    <span className="text-[10px] text-slate-500 ml-1">pt</span>
+                  </div>
+                </div>
+
+                {/* Badges */}
+                <div className="mt-3.5 flex flex-wrap gap-1.5">
+                  {selectedPlanetUser.badges.map((b) => (
+                    <span
+                      key={b}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                    >
+                      #{b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-5 pt-3 border-t border-slate-800/80 flex flex-col gap-2">
+                <button
+                  onClick={() => flyToUser(selectedPlanetUser)}
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  <span>镜头聚焦特写</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://x.com/${selectedPlanetUser.handle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>访问 X 主页</span>
+                  </a>
+
+                  <button
+                    onClick={handleResetCamera}
+                    className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition-all cursor-pointer"
+                    title="复位至全局星系俯视"
+                  >
+                    <span>全局</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. Minimalist Orbit Legend (Bottom Left) */}
+        <div className="absolute bottom-4 left-4 hidden sm:flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl px-3.5 py-2 rounded-2xl border border-slate-800/90 shadow-2xl pointer-events-none text-xs text-slate-400">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
             <span className="text-slate-300">核心星系 (S)</span>
@@ -714,8 +1118,8 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           </div>
         </div>
 
-        {/* Speed & Interactive Controls Bar (Bottom Right) */}
-        <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-slate-800 shadow-xl">
+        {/* 6. Speed & Cosmic Control Deck (Bottom Right) */}
+        <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 backdrop-blur-xl px-2.5 py-1.5 rounded-2xl border border-slate-800/90 shadow-2xl">
           {/* Play/Pause */}
           <button
             onClick={() => setIsPlaying(!isPlaying)}
@@ -728,7 +1132,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           {/* Speed Presets */}
           <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 border border-slate-700/60">
             {[
-              { label: '0.3x', val: 0.3, tip: '慢速惬意' },
+              { label: '0.3x', val: 0.3, tip: '惬意慢速' },
               { label: '0.8x', val: 0.8, tip: '标准优雅' },
               { label: '1.5x', val: 1.5, tip: '极速穿梭' },
             ].map((spd) => (
@@ -753,17 +1157,20 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           {/* Reset Camera View */}
           <button
             onClick={handleResetCamera}
-            title="复位视角"
+            title="复位至全局视角"
             className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
-        </div>
 
-        {/* Operation Hint */}
-        <div className="absolute top-4 right-4 hidden md:flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/70 backdrop-blur-sm px-2.5 py-1 rounded-xl border border-slate-800/60 pointer-events-none">
-          <Compass className="w-3.5 h-3.5 text-indigo-400" />
-          左键旋转 · 滚轮缩放 · 悬停自动减速 · 点击看详情
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? '退出全屏' : '全屏沉浸漫游'}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-amber-300" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
         </div>
       </div>
     </div>

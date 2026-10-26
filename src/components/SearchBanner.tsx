@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, FolderArchive, Loader2 } from 'lucide-react';
+import { Sparkles, FolderArchive, Loader2, Search } from 'lucide-react';
 
 interface SearchBannerProps {
   onSearch: (handle: string) => void;
@@ -31,77 +31,96 @@ export const SearchBanner: React.FC<SearchBannerProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pt-6 pb-2">
-      {/* Search Bar Container */}
-      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-2.5 sm:p-3 shadow-2xl shadow-indigo-950/20 backdrop-blur-xl">
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center gap-2">
-          {/* Input field */}
-          <div className="relative flex-1 w-full flex items-center">
-            <span className="absolute left-3.5 text-slate-500 font-medium text-sm select-none">
+    <div className="w-full max-w-5xl mx-auto px-4 pt-4 pb-2 animate-fade-in">
+      <div className="bg-slate-900/75 border border-slate-800/80 rounded-2xl p-2.5 sm:p-3 shadow-xl shadow-indigo-950/30 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Search Input Form */}
+        <form onSubmit={handleSubmit} className="flex-1 w-full flex items-center gap-2">
+          <div className="relative flex-1 flex items-center">
+            <span className="absolute left-3.5 text-indigo-400 font-mono text-sm select-none">
               @
             </span>
             <input
               type="text"
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value.replace(/^@/, ''))}
-              placeholder="输入 X / Twitter 用户名 (如 coldmountainlab)"
-              className="w-full pl-8 pr-4 py-2.5 bg-slate-950/80 border border-slate-800/80 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+              placeholder="输入 X / Twitter 用户名 (如 coldmountainlab, sama)..."
+              className="w-full pl-8 pr-10 py-2 bg-slate-950/80 border border-slate-800/90 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/80 transition-all font-mono"
             />
+            {inputVal && (
+              <button
+                type="button"
+                onClick={() => setInputVal('')}
+                className="absolute right-3 text-slate-500 hover:text-slate-300 text-xs"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>分析中...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-indigo-200" />
-                  <span>生成互动圈</span>
-                </>
-              )}
-            </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>生成中</span>
+              </>
+            ) : (
+              <>
+                <Search className="w-3.5 h-3.5" />
+                <span>分析星系</span>
+              </>
+            )}
+          </button>
+        </form>
 
+        {/* Quick Picks & Actions */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
+            <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              推荐:
+            </span>
+            {['coldmountainlab', 'sama', 'levelsio', 'youyuxi'].map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => handleQuickPick(h)}
+                className={`px-2 py-1 rounded-lg text-[11px] transition-all cursor-pointer whitespace-nowrap ${
+                  inputVal === h
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                    : 'bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                @{h}
+              </button>
+            ))}
+          </div>
+
+          <div className="h-4 w-px bg-slate-800 hidden md:block" />
+
+          {/* Local Archive & Demo Buttons */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={onOpenArchiveModal}
-              title="导入从 X 导出的归档 zip 或 tweets.js，享受 100% 隐私与无限历史"
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 text-slate-300 hover:text-white text-xs sm:text-sm font-medium rounded-xl transition-all cursor-pointer whitespace-nowrap"
+              title="导入本地推特归档数据 (tweets.js 或 zip)"
+              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-300 hover:text-white text-xs rounded-xl transition-all cursor-pointer"
             >
-              <FolderArchive className="w-4 h-4 text-amber-400" />
-              <span className="hidden md:inline">本地归档</span>
+              <FolderArchive className="w-3.5 h-3.5 text-amber-400" />
+              <span>归档</span>
             </button>
 
             <button
               type="button"
               onClick={onLoadDemo}
-              className="flex items-center justify-center gap-1 px-3 py-2.5 bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-slate-200 text-xs sm:text-sm font-medium rounded-xl transition-all cursor-pointer whitespace-nowrap"
+              className="px-2.5 py-1 bg-slate-800/40 hover:bg-slate-700/60 text-slate-400 hover:text-slate-200 text-xs rounded-xl transition-all cursor-pointer"
             >
-              <span>Demo</span>
+              Demo
             </button>
           </div>
-        </form>
-
-        {/* Quick Picks */}
-        <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-slate-800/60 text-xs text-slate-400 flex-wrap">
-          <span className="text-slate-500">快速体验:</span>
-          {['coldmountainlab', 'sama', 'levelsio', 'paulg', 'youyuxi'].map((h) => (
-            <button
-              key={h}
-              type="button"
-              onClick={() => handleQuickPick(h)}
-              className="px-2 py-0.5 rounded-md bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
-            >
-              @{h}
-            </button>
-          ))}
         </div>
       </div>
     </div>
