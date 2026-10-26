@@ -21,13 +21,15 @@ export interface UserNode {
   badges: string[];
 }
 
+export interface TargetUser {
+  name: string;
+  handle: string;
+  avatar: string;
+  bio?: string;
+}
+
 export interface CircleData {
-  targetUser: {
-    name: string;
-    handle: string;
-    avatar: string;
-    bio?: string;
-  };
+  targetUser: TargetUser;
   innerRing: UserNode[];   // 核心内圈 (最亲密好友, 6~8人)
   middleRing: UserNode[];  // 活跃中圈 (高频互动, 12~16人)
   outerRing: UserNode[];   // 泛交外圈 (日常互动, 20~28人)

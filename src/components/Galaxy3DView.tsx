@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { CircleData, UserNode } from '../types';
+import { EncounterModal } from './EncounterModal';
 
 interface Galaxy3DViewProps {
   data: CircleData;
@@ -43,6 +44,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const [selectedPlanetUser, setSelectedPlanetUser] = useState<UserNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isEncounterModalOpen, setIsEncounterModalOpen] = useState(false);
+
+  // Sync selected planet to ref for 60fps Three.js animation loop
+  const selectedPlanetUserRef = useRef<UserNode | null>(null);
+  useEffect(() => {
+    selectedPlanetUserRef.current = selectedPlanetUser;
+  }, [selectedPlanetUser]);
 
   // Three.js References
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -713,6 +721,42 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       });
     });
 
+    // 10d. Gravitational Resonance Tether & Flowing Photon Particles
+    const TETHER_POINTS = 64;
+    const tetherGeo = new THREE.BufferGeometry();
+    const tetherPositions = new Float32Array(TETHER_POINTS * 3);
+    tetherGeo.setAttribute('position', new THREE.BufferAttribute(tetherPositions, 3));
+
+    const tetherMat = new THREE.LineBasicMaterial({
+      color: 0xfbbf24,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const tetherLine = new THREE.Line(tetherGeo, tetherMat);
+    scene.add(tetherLine);
+
+    // Luminous Photon Particle Stream along the Gravitational Tether
+    const PHOTON_COUNT = 20;
+    const photonGeo = new THREE.BufferGeometry();
+    const photonPositions = new Float32Array(PHOTON_COUNT * 3);
+    const photonColors = new Float32Array(PHOTON_COUNT * 3);
+    photonGeo.setAttribute('position', new THREE.BufferAttribute(photonPositions, 3));
+    photonGeo.setAttribute('color', new THREE.BufferAttribute(photonColors, 3));
+
+    const photonMat = new THREE.PointsMaterial({
+      size: 5.5,
+      map: starTexture,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const photonPoints = new THREE.Points(photonGeo, photonMat);
+    scene.add(photonPoints);
+
     // 11. 60 FPS Animation Loop
     const BASE_SPEED = 0.0006;
     let clock = 0;
@@ -810,6 +854,85 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           );
         }
       });
+
+      // 12. Gravitational Resonance Tether & Flowing Photons
+      let activeTargetNode: PlanetNodeRef | null = null;
+      if (hoveredSpriteRef.current) {
+        activeTargetNode =
+          planetNodesRef.current.find(
+            (n) => n.sprite === hoveredSpriteRef.current && n.user.id !== 'sun-center'
+          ) || null;
+      }
+      if (!activeTargetNode && selectedPlanetUserRef.current && selectedPlanetUserRef.current.id !== 'sun-center') {
+        activeTargetNode =
+          planetNodesRef.current.find(
+            (n) => n.user.id === selectedPlanetUserRef.current?.id
+          ) || null;
+      }
+
+      if (activeTargetNode) {
+        // World coordinates of active friend planet
+        const planetWorldPos = new THREE.Vector3();
+        activeTargetNode.sprite.getWorldPosition(planetWorldPos);
+
+        const sunWorldPos = new THREE.Vector3(0, 3.5, 0);
+        const dist = sunWorldPos.distanceTo(planetWorldPos);
+
+        // Arched gravitational midpoint in 3D space
+        const midPoint = new THREE.Vector3()
+          .addVectors(sunWorldPos, planetWorldPos)
+          .multiplyScalar(0.5);
+        midPoint.y += Math.min(22, 6.0 + dist * 0.08);
+
+        const tetherCurve = new THREE.QuadraticBezierCurve3(sunWorldPos, midPoint, planetWorldPos);
+        const sampledPoints = tetherCurve.getPoints(TETHER_POINTS - 1);
+
+        const tPosAttr = tetherGeo.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < TETHER_POINTS; i++) {
+          tPosAttr.setXYZ(i, sampledPoints[i].x, sampledPoints[i].y, sampledPoints[i].z);
+        }
+        tPosAttr.needsUpdate = true;
+
+        // Flowing Photons Stream
+        const isMutual = activeTargetNode.user.relationship === 'mutual';
+        const pPosAttr = photonGeo.attributes.position as THREE.BufferAttribute;
+        const pColAttr = photonGeo.attributes.color as THREE.BufferAttribute;
+
+        for (let i = 0; i < PHOTON_COUNT; i++) {
+          // Flowing progress
+          let progress = (clock * 0.35 + i / PHOTON_COUNT) % 1.0;
+
+          // Bidirectional flow for mutual encounters ("双向奔赴")
+          if (isMutual && i % 2 === 1) {
+            progress = 1.0 - progress;
+          }
+
+          const pt = tetherCurve.getPoint(progress);
+          pPosAttr.setXYZ(i, pt.x, pt.y, pt.z);
+
+          if (isMutual) {
+            if (i % 2 === 0) {
+              // Radiant golden photon from sun
+              pColAttr.setXYZ(i, 1.0, 0.85, 0.3);
+            } else {
+              // Ethereal cyan-violet photon from friend
+              pColAttr.setXYZ(i, 0.75, 0.85, 1.0);
+            }
+          } else {
+            pColAttr.setXYZ(i, 1.0, 0.9, 0.5);
+          }
+        }
+        pPosAttr.needsUpdate = true;
+        pColAttr.needsUpdate = true;
+
+        // Smoothly fade in tether and photons
+        tetherMat.opacity = THREE.MathUtils.lerp(tetherMat.opacity, 0.75, 0.15);
+        photonMat.opacity = THREE.MathUtils.lerp(photonMat.opacity, 0.95, 0.15);
+      } else {
+        // Smoothly fade out
+        tetherMat.opacity = THREE.MathUtils.lerp(tetherMat.opacity, 0, 0.12);
+        photonMat.opacity = THREE.MathUtils.lerp(photonMat.opacity, 0, 0.12);
+      }
 
       renderer.render(scene, camera);
     };
@@ -1133,6 +1256,31 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                     </span>
                   ))}
                 </div>
+
+                {/* 在星辰中相遇 · 浪漫引力纪事与星历卡生成 */}
+                {selectedPlanetUser.id !== 'sun-center' && (
+                  <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-indigo-950/40 to-slate-900/90 border border-amber-500/35 shadow-xl shadow-amber-950/20">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        在星辰中相遇 · 纪念纪事
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/20">
+                        {selectedPlanetUser.relationship === 'mutual' ? '双星引力共振' : '引力轨道捕获'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 italic leading-relaxed">
+                      “每一个关注，都是引力的捕获；每一条回复，都是跨越光年的回响。”
+                    </p>
+                    <button
+                      onClick={() => setIsEncounterModalOpen(true)}
+                      className="mt-2.5 w-full py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all cursor-pointer group"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-slate-950 group-hover:rotate-12 transition-transform" />
+                      <span>生成双星相遇星历卡 (16:9)</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -1239,6 +1387,16 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
             {isFullscreen ? <Minimize2 className="w-4 h-4 text-amber-300" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
+
+        {/* 7. Dual Star Encounter Poster Generator Modal */}
+        {selectedPlanetUser && selectedPlanetUser.id !== 'sun-center' && (
+          <EncounterModal
+            isOpen={isEncounterModalOpen}
+            onClose={() => setIsEncounterModalOpen(false)}
+            targetUser={data.targetUser}
+            friend={selectedPlanetUser}
+          />
+        )}
       </div>
     </div>
   );
