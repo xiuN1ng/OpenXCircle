@@ -18,61 +18,101 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const planetsGroupRef = useRef<THREE.Group | null>(null);
+  const billboardMeshesRef = useRef<THREE.Mesh[]>([]);
   const animFrameRef = useRef<number | null>(null);
 
   // Interaction refs
   const isDraggingRef = useRef(false);
   const previousMousePositionRef = useRef({ x: 0, y: 0 });
-  const rotationMomentumRef = useRef({ x: 0.002, y: 0 });
+  const rotationMomentumRef = useRef({ x: 0.0015, y: 0 });
   const clickableMeshesRef = useRef<Map<THREE.Object3D, UserNode>>(new Map());
 
-  // Texture loader helper
-  const createAvatarTexture = (avatarUrl: string, name: string): THREE.Texture => {
+  // High-definition billboard avatar texture generator
+  const createBillboardTexture = (
+    avatarUrl: string,
+    name: string,
+    rank: 'S' | 'A' | 'B' | 'C' | 'SUN'
+  ): THREE.Texture => {
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
 
-    // Initial background
-    const grad = ctx.createLinearGradient(0, 0, 128, 128);
-    grad.addColorStop(0, '#6366f1');
-    grad.addColorStop(1, '#a855f7');
+    const borderColor =
+      rank === 'SUN'
+        ? '#818cf8'
+        : rank === 'S'
+        ? '#f59e0b'
+        : rank === 'A'
+        ? '#c084fc'
+        : '#38bdf8';
+
+    // 1. Outer Glow Ring
+    const grad = ctx.createRadialGradient(128, 128, 90, 128, 128, 124);
+    grad.addColorStop(0, borderColor);
+    grad.addColorStop(1, 'transparent');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(64, 64, 60, 0, Math.PI * 2);
+    ctx.arc(128, 128, 124, 0, Math.PI * 2);
     ctx.fill();
 
-    // Initial text
+    // 2. Base Disc
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(128, 128, 105, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Fallback Initial Letter
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 52px system-ui, sans-serif';
+    ctx.font = 'bold 96px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText((name || '?').charAt(0).toUpperCase(), 64, 64);
+    ctx.fillText((name || '?').replace('@', '').charAt(0).toUpperCase(), 128, 128);
+
+    // 4. Solid Border
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(128, 128, 105, 0, Math.PI * 2);
+    ctx.stroke();
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
 
-    // Try loading real image asynchronously
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = avatarUrl;
-    img.onload = () => {
-      ctx.clearRect(0, 0, 128, 128);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(64, 64, 60, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(img, 0, 0, 128, 128);
-      ctx.restore();
+    // Asynchronously load real avatar image
+    if (avatarUrl) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+      img.src = avatarUrl;
+      img.onload = () => {
+        ctx.clearRect(0, 0, 256, 256);
 
-      // Border
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.arc(64, 64, 58, 0, Math.PI * 2);
-      ctx.stroke();
+        // Outer glow
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(128, 128, 124, 0, Math.PI * 2);
+        ctx.fill();
 
-      texture.needsUpdate = true;
-    };
+        // Clip & draw image
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(128, 128, 105, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, 23, 23, 210, 210);
+        ctx.restore();
+
+        // Border ring
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.arc(128, 128, 105, 0, Math.PI * 2);
+        ctx.stroke();
+
+        texture.needsUpdate = true;
+      };
+    }
 
     return texture;
   };
@@ -84,40 +124,41 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const width = mount.clientWidth || 800;
     const height = mount.clientHeight || 650;
 
-    // 1. Scene & Camera
+    // 1. Scene & Cinematic Camera (Tilted 45°俯视视角 for perfect 3D depth)
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.FogExp2(0x020617, 0.0012);
+    scene.fog = new THREE.FogExp2(0x020617, 0.0009);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
-    camera.position.set(0, 180, 320);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 3000);
+    // Tilted camera position looking down at the solar system:
+    camera.position.set(0, 240, 270);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // 2. Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // 2. WebGL Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x020617, 1);
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 3. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+    // 3. Ambient & Point Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const centerLight = new THREE.PointLight(0x818cf8, 3, 500);
-    centerLight.position.set(0, 0, 0);
-    scene.add(centerLight);
+    const coreLight = new THREE.PointLight(0xa855f7, 4, 600);
+    coreLight.position.set(0, 0, 0);
+    scene.add(coreLight);
 
-    // 4. Starfield Particles (2,500 3D Stars)
+    // 4. Cosmic Starfield Particles (3,000 depth stars)
     const starGeometry = new THREE.BufferGeometry();
-    const starCount = 2500;
+    const starCount = 3000;
     const starPositions = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
 
     for (let i = 0; i < starCount; i++) {
-      const r = 200 + Math.random() * 800;
+      const r = 250 + Math.random() * 900;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
 
@@ -127,11 +168,11 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
       const colorMix = Math.random();
       if (colorMix > 0.7) {
-        starColors[i * 3] = 0.5; starColors[i * 3 + 1] = 0.6; starColors[i * 3 + 2] = 1.0; // blueish
+        starColors[i * 3] = 0.4; starColors[i * 3 + 1] = 0.6; starColors[i * 3 + 2] = 1.0;
       } else if (colorMix > 0.4) {
-        starColors[i * 3] = 0.9; starColors[i * 3 + 1] = 0.6; starColors[i * 3 + 2] = 0.9; // purple
+        starColors[i * 3] = 0.9; starColors[i * 3 + 1] = 0.5; starColors[i * 3 + 2] = 0.9;
       } else {
-        starColors[i * 3] = 1.0; starColors[i * 3 + 1] = 1.0; starColors[i * 3 + 2] = 1.0; // white
+        starColors[i * 3] = 1.0; starColors[i * 3 + 1] = 1.0; starColors[i * 3 + 2] = 1.0;
       }
     }
 
@@ -139,10 +180,10 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
 
     const starMaterial = new THREE.PointsMaterial({
-      size: 1.8,
+      size: 2.0,
       vertexColors: true,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.8,
     });
     const starField = new THREE.Points(starGeometry, starMaterial);
     scene.add(starField);
@@ -153,112 +194,125 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     planetsGroupRef.current = systemGroup;
 
     clickableMeshesRef.current.clear();
+    billboardMeshesRef.current = [];
 
-    // 6. Center Star (Target User Sun)
-    const centerTex = createAvatarTexture(data.targetUser.avatar, data.targetUser.handle);
-    const centerGeo = new THREE.SphereGeometry(18, 32, 32);
+    // 6. Central Sun (Target User Billboard - ALWAYS FACES CAMERA)
+    const centerRadius = 26;
+    const centerTex = createBillboardTexture(data.targetUser.avatar, data.targetUser.handle, 'SUN');
+    const centerGeo = new THREE.CircleGeometry(centerRadius, 32);
     const centerMat = new THREE.MeshBasicMaterial({
       map: centerTex,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
     const centerMesh = new THREE.Mesh(centerGeo, centerMat);
+    centerMesh.position.set(0, 0, 0);
     systemGroup.add(centerMesh);
+    billboardMeshesRef.current.push(centerMesh);
 
-    // Center Sun Glow Halo
-    const sunHaloGeo = new THREE.SphereGeometry(22, 16, 16);
-    const sunHaloMat = new THREE.MeshBasicMaterial({
+    // Central Corona Aura (Horizontal glow ring)
+    const coronaGeo = new THREE.RingGeometry(centerRadius * 1.05, centerRadius * 1.5, 32);
+    const coronaMat = new THREE.MeshBasicMaterial({
       color: 0x6366f1,
       transparent: true,
-      opacity: 0.35,
-      wireframe: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
     });
-    const sunHalo = new THREE.Mesh(sunHaloGeo, sunHaloMat);
-    systemGroup.add(sunHalo);
+    const coronaMesh = new THREE.Mesh(coronaGeo, coronaMat);
+    coronaMesh.rotation.x = Math.PI / 2;
+    systemGroup.add(coronaMesh);
 
-    // 7. Orbits & Planets
-    const orbitRadii = [60, 110, 160];
+    // 7. Orbits & Planetary Billboards
+    // Spaced out for high readability
+    const orbitRadii = [75, 135, 195];
     const rings = [data.innerRing, data.middleRing, data.outerRing];
     const ringColors = [0x6366f1, 0xa855f7, 0x06b6d4];
 
     orbitRadii.forEach((radius, ringIdx) => {
-      // 3D Orbital Path Track
+      // 3D Orbital Track Ring
       const orbitCurve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
       const points = orbitCurve.getPoints(120);
       const orbitGeo = new THREE.BufferGeometry().setFromPoints(
         points.map((p) => new THREE.Vector3(p.x, 0, p.y))
       );
-      const orbitMat = new THREE.LineDashedMaterial({
+      const orbitMat = new THREE.LineBasicMaterial({
         color: ringColors[ringIdx],
-        dashSize: 3,
-        gapSize: 2,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.35,
       });
       const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
-      orbitLine.computeLineDistances();
       systemGroup.add(orbitLine);
 
-      // Planet Nodes on this orbit
+      // Planet Nodes
       const usersOnRing = rings[ringIdx] || [];
       const userCount = usersOnRing.length;
       if (userCount === 0) return;
 
       const angleStep = (Math.PI * 2) / userCount;
-      const planetRadius = ringIdx === 0 ? 8 : ringIdx === 1 ? 6.5 : 5;
+      const nodeRadius = ringIdx === 0 ? 12 : ringIdx === 1 ? 9.5 : 7.5;
 
       usersOnRing.forEach((user, idx) => {
         const angle = idx * angleStep;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
 
-        const planetGeo = new THREE.SphereGeometry(planetRadius, 24, 24);
-        const planetTex = createAvatarTexture(user.avatar, user.handle);
-        const planetMat = new THREE.MeshStandardMaterial({
+        // Planet Billboard (ALWAYS FACES CAMERA)
+        const planetGeo = new THREE.CircleGeometry(nodeRadius, 32);
+        const planetTex = createBillboardTexture(user.avatar, user.handle, user.rank);
+        const planetMat = new THREE.MeshBasicMaterial({
           map: planetTex,
-          roughness: 0.4,
-          metalness: 0.1,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthWrite: false,
         });
         const planetMesh = new THREE.Mesh(planetGeo, planetMat);
         planetMesh.position.set(x, 0, z);
 
-        // Store reference for raycasting / clicking
+        // Save reference for raycaster and billboard camera-tracking
         clickableMeshesRef.current.set(planetMesh, user);
+        billboardMeshesRef.current.push(planetMesh);
         systemGroup.add(planetMesh);
 
-        // Atmosphere halo for S-tier / top planets
-        if (user.rank === 'S' || ringIdx === 0) {
-          const saturnRingGeo = new THREE.RingGeometry(planetRadius * 1.3, planetRadius * 1.8, 24);
-          const saturnRingMat = new THREE.MeshBasicMaterial({
-            color: 0xf59e0b,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.6,
-          });
-          const saturnRing = new THREE.Mesh(saturnRingGeo, saturnRingMat);
-          saturnRing.rotation.x = Math.PI / 2.5;
-          planetMesh.add(saturnRing);
-        }
+        // Planetary Orbital Glow Ring (lying on the orbit plane for 3D planetary look)
+        const haloGeo = new THREE.RingGeometry(nodeRadius * 1.05, nodeRadius * 1.45, 24);
+        const haloMat = new THREE.MeshBasicMaterial({
+          color: user.rank === 'S' ? 0xf59e0b : user.rank === 'A' ? 0xc084fc : 0x38bdf8,
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide,
+        });
+        const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+        haloMesh.position.set(x, 0, z);
+        haloMesh.rotation.x = Math.PI / 2;
+        systemGroup.add(haloMesh);
       });
     });
 
-    // 8. Animation Loop
+    // 8. 60 FPS Animation Loop (Crucial: orient all avatars directly towards camera)
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate);
 
-      // Starfield subtle twinkling / rotation
-      starField.rotation.y += 0.0003;
-
-      // System rotation
-      if (isPlaying) {
-        systemGroup.rotation.y += 0.002;
-        centerMesh.rotation.y += 0.005;
+      // 1. Keep all avatar billboards facing the camera directly at all times!
+      const cameraQuat = camera.quaternion;
+      for (let i = 0; i < billboardMeshesRef.current.length; i++) {
+        billboardMeshesRef.current[i].quaternion.copy(cameraQuat);
       }
 
-      // Apply drag momentum
+      // 2. Starfield slow rotation
+      starField.rotation.y += 0.0002;
+
+      // 3. System smooth rotation
+      if (isPlaying) {
+        systemGroup.rotation.y += 0.0018;
+      }
+
+      // 4. Momentum damping when not dragging
       if (!isDraggingRef.current) {
         systemGroup.rotation.y += rotationMomentumRef.current.x;
         systemGroup.rotation.x += rotationMomentumRef.current.y;
-        rotationMomentumRef.current.x *= 0.95;
-        rotationMomentumRef.current.y *= 0.95;
+        rotationMomentumRef.current.x *= 0.94;
+        rotationMomentumRef.current.y *= 0.94;
       }
 
       renderer.render(scene, camera);
@@ -292,8 +346,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const getIntersectedUser = useCallback((clientX: number, clientY: number): UserNode | null => {
     const mount = mountRef.current;
     const camera = cameraRef.current;
-    const scene = sceneRef.current;
-    if (!mount || !camera || !scene) return null;
+    if (!mount || !camera) return null;
 
     const rect = mount.getBoundingClientRect();
     const x = ((clientX - rect.left) / mount.clientWidth) * 2 - 1;
@@ -328,13 +381,12 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       const deltaX = e.clientX - previousMousePositionRef.current.x;
       const deltaY = e.clientY - previousMousePositionRef.current.y;
 
-      planetsGroupRef.current.rotation.y += deltaX * 0.006;
-      planetsGroupRef.current.rotation.x += deltaY * 0.006;
+      planetsGroupRef.current.rotation.y += deltaX * 0.005;
+      planetsGroupRef.current.rotation.x += deltaY * 0.005;
 
-      rotationMomentumRef.current = { x: deltaX * 0.003, y: deltaY * 0.003 };
+      rotationMomentumRef.current = { x: deltaX * 0.002, y: deltaY * 0.002 };
       previousMousePositionRef.current = { x: e.clientX, y: e.clientY };
     } else {
-      // Check hover
       const user = getIntersectedUser(e.clientX, e.clientY);
       setHoveredUser(user);
     }
@@ -361,14 +413,14 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const camera = cameraRef.current;
     if (!camera) return;
 
-    camera.position.z = Math.min(600, Math.max(100, camera.position.z + e.deltaY * 0.3));
-    camera.position.y = Math.min(350, Math.max(50, camera.position.y + e.deltaY * 0.15));
+    camera.position.z = Math.min(500, Math.max(120, camera.position.z + e.deltaY * 0.25));
+    camera.position.y = Math.min(420, Math.max(80, camera.position.y + e.deltaY * 0.22));
   };
 
   return (
     <div className="relative w-full max-w-5xl mx-auto p-2 sm:p-4 animate-fade-in">
       <div className="relative w-full h-[580px] sm:h-[660px] rounded-3xl overflow-hidden shadow-2xl shadow-indigo-950/60 border border-slate-800/80 bg-slate-950 select-none">
-        {/* Three.js Container */}
+        {/* Three.js Canvas Container */}
         <div
           ref={mountRef}
           onMouseDown={handleMouseDown}
@@ -391,12 +443,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           <button
             onClick={() => {
               if (cameraRef.current && planetsGroupRef.current) {
-                cameraRef.current.position.set(0, 180, 320);
+                // Reset to optimal 45° overhead tilted view
+                cameraRef.current.position.set(0, 240, 270);
                 cameraRef.current.lookAt(0, 0, 0);
                 planetsGroupRef.current.rotation.set(0, 0, 0);
               }
             }}
-            title="复位视角"
+            title="复位 45° 俯瞰视角"
             className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <Compass className="w-4 h-4" />
@@ -411,7 +464,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           </span>
           <span className="hidden sm:flex items-center gap-1 text-[11px] text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-full border border-slate-800 backdrop-blur-md">
             <Info className="w-3 h-3 text-indigo-400" />
-            鼠标拖拽 360° 旋转 · 滚轮缩放 · 点击任意星球查看详情
+            已开启「头像锁定面朝视角」· 鼠标拖拽 360° · 点击任意星球查看详情
           </span>
         </div>
 
@@ -419,7 +472,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         {hoveredUser && (
           <div
             style={{
-              left: Math.min(window.innerWidth - 200, mousePos.x + 15),
+              left: Math.min(window.innerWidth - 220, mousePos.x + 15),
               top: Math.max(10, mousePos.y - 70),
             }}
             className="absolute z-20 pointer-events-none p-3 rounded-2xl bg-slate-900/95 border border-indigo-500/50 shadow-2xl backdrop-blur-md flex items-center gap-3 transition-opacity duration-150 animate-fade-in"
@@ -436,7 +489,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                 <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-semibold">
                   {hoveredUser.rank} 级星球
                 </span>
-                <span>{hoveredUser.score} pts</span>
+                <span>{hoveredUser.score} pts · 点击查看</span>
               </div>
             </div>
           </div>
