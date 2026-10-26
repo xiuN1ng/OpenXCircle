@@ -1,0 +1,58 @@
+import type { ThemeConfig, ThemePreset } from '../types';
+
+export const THEMES: Record<ThemePreset, ThemeConfig> = {
+  cosmic: {
+    id: 'cosmic',
+    name: '深邃宇宙 (Cosmic)',
+    bgGradient: ['#030712', '#0f172a', '#020617'],
+    ringColors: ['rgba(99, 102, 241, 0.45)', 'rgba(168, 85, 247, 0.35)', 'rgba(236, 72, 153, 0.25)'],
+    glowColor: '#6366f1',
+    textColor: '#f8fafc',
+    accentColor: '#818cf8',
+  },
+  cyberpunk: {
+    id: 'cyberpunk',
+    name: '霓虹赛博 (Cyberpunk)',
+    bgGradient: ['#09090b', '#180828', '#050510'],
+    ringColors: ['rgba(244, 63, 94, 0.6)', 'rgba(6, 182, 212, 0.45)', 'rgba(234, 179, 8, 0.3)'],
+    glowColor: '#06b6d4',
+    textColor: '#fafafa',
+    accentColor: '#f43f5e',
+  },
+  aurora: {
+    id: 'aurora',
+    name: '北极极光 (Aurora)',
+    bgGradient: ['#02120e', '#062620', '#03110e'],
+    ringColors: ['rgba(16, 185, 129, 0.55)', 'rgba(56, 189, 248, 0.4)', 'rgba(147, 51, 234, 0.3)'],
+    glowColor: '#10b981',
+    textColor: '#ecfdf5',
+    accentColor: '#34d399',
+  },
+  matrix: {
+    id: 'matrix',
+    name: '黑客矩阵 (Matrix)',
+    bgGradient: ['#020804', '#05180c', '#010602'],
+    ringColors: ['rgba(34, 197, 94, 0.6)', 'rgba(74, 222, 128, 0.4)', 'rgba(20, 83, 45, 0.3)'],
+    glowColor: '#22c55e',
+    textColor: '#dcfce7',
+    accentColor: '#4ade80',
+  },
+  sunset: {
+    id: 'sunset',
+    name: '暮色晚霞 (Sunset Glow)',
+    bgGradient: ['#180816', '#2d121c', '#15060f'],
+    ringColors: ['rgba(249, 115, 22, 0.55)', 'rgba(244, 63, 94, 0.45)', 'rgba(168, 85, 247, 0.3)'],
+    glowColor: '#f97316',
+    textColor: '#fff1f2',
+    accentColor: '#fb923c',
+  },
+  clean: {
+    id: 'clean',
+    name: '极简暗曜 (Minimal Dark)',
+    bgGradient: ['#121212', '#18181b', '#09090b'],
+    ringColors: ['rgba(255, 255, 255, 0.35)', 'rgba(255, 255, 255, 0.22)', 'rgba(255, 255, 255, 0.12)'],
+    glowColor: '#ffffff',
+    textColor: '#ffffff',
+    accentColor: '#a1a1aa',
+  },
+};
