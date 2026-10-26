@@ -11,13 +11,27 @@ interface FxTwitterUser {
   likes?: number;
 }
 
-interface CatsukiResponse {
+interface RawInteractionEntry {
+  tweetId: string;
+  author: string;
+  target: string;
+  type: string;
+  text: string;
+  direction: 'inbound' | 'outbound';
+  createdAt: number;
+}
+
+interface WorkerApiResponse {
   screenName: string;
   selfAvatarUrl?: string;
   counts?: {
     mentionsToYou: number;
     mentionsFromYou: number;
     mergedUniqueTweets: number;
+  };
+  aggregates?: {
+    authorsToYou?: Record<string, number>;
+    targetsFromYou?: Record<string, number>;
   };
   circleUsers?: Array<{
     id: string;
@@ -28,7 +42,15 @@ interface CatsukiResponse {
     interactionScore: number;
     interactionCount: number;
   }>;
+  entries?: RawInteractionEntry[];
+  profileFollowers?: number;
+  profileFollowing?: number;
+  profileTweets?: number;
+  profileLikes?: number;
 }
+
+// Configured Cloudflare Worker endpoint
+const PROXY_ENDPOINT = 'https://openxcircle-proxy.xiuningkou.workers.dev';
 
 export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
   const cleanHandle = handle.replace(/^@/, '').trim();
@@ -36,8 +58,8 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     throw new Error('请输入有效的 X 用户名');
   }
 
-  // 1. Fetch real target profile from FxTwitter API (Always real, has CORS, works globally)
-  let realProfile: FxTwitterUser | null = null;
+  // 1. Fetch real target profile from FxTwitter API for rich bio & exact display name
+  let fxProfile: FxTwitterUser | null = null;
   try {
     const fxResp = await fetch(`https://api.fxtwitter.com/${cleanHandle}`, {
       headers: { 'Accept': 'application/json' },
@@ -45,101 +67,109 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     if (fxResp.ok) {
       const fxData = await fxResp.json();
       if (fxData && fxData.user) {
-        realProfile = fxData.user;
+        fxProfile = fxData.user;
       }
     }
   } catch (err) {
-    console.warn('FxTwitter profile fetch failed:', err);
+    console.warn('FxTwitter fetch profile notice:', err);
   }
 
-  // 2. Try fetching real interaction circle from public endpoints / relays
-  let circleUsers: UserNode[] = [];
-  let totalInteractions = 0;
+  // 2. Fetch real interaction data from Cloudflare Worker Relay
+  const workerUrl = `${PROXY_ENDPOINT}/?screenName=${encodeURIComponent(cleanHandle)}`;
+  const resp = await fetch(workerUrl);
+
+  if (!resp.ok) {
+    throw new Error(`获取数据失败 (HTTP ${resp.status})，请检查推特用户名是否正确或稍后重试。`);
+  }
+
+  const rawData: WorkerApiResponse = await resp.json();
+
+  if (!rawData.circleUsers || rawData.circleUsers.length === 0) {
+    throw new Error(`未查到 @${cleanHandle} 在近期（30天内）有公开推文互动记录。`);
+  }
+
+  const authorsToYou = rawData.aggregates?.authorsToYou || {};
+  const targetsFromYou = rawData.aggregates?.targetsFromYou || {};
+
   let mutualCount = 0;
+  let fanCount = 0;
+  let admireCount = 0;
 
-  // Attempt to fetch from open relays
-  const candidateUrls = [
-    `https://circle.catsuki.cc/api/yahoo-mentions?screenName=${cleanHandle}&buildCircle=1`,
-  ];
+  // Transform raw circleUsers to UserNode
+  const scoredUsers: UserNode[] = rawData.circleUsers.map((u, i) => {
+    const toYou = authorsToYou[u.screenName.toLowerCase()] || 0;
+    const fromYou = targetsFromYou[u.screenName.toLowerCase()] || 0;
 
-  for (const url of candidateUrls) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const raw: CatsukiResponse = await resp.json();
-        if (raw.circleUsers && raw.circleUsers.length > 0) {
-          totalInteractions = raw.counts
-            ? raw.counts.mentionsToYou + raw.counts.mentionsFromYou
-            : raw.circleUsers.length * 3;
-
-          circleUsers = raw.circleUsers.map((u, i) => {
-            const score = u.interactionScore || 50;
-            let relationship: RelationshipType = 'mutual';
-            if (i < 5) {
-              relationship = 'mutual';
-              mutualCount += 1;
-            } else if (i % 2 === 0) {
-              relationship = 'fan';
-            } else {
-              relationship = 'admire';
-            }
-
-            const badges: string[] = [];
-            if (i < 3) badges.push('核心挚友', '双向奔赴');
-            else if (score > 30) badges.push('高频互动');
-            else badges.push('日常推友');
-
-            return {
-              id: u.id || `user-${i}-${u.screenName}`,
-              name: u.displayName || u.screenName,
-              handle: u.screenName,
-              avatar: u.avatarUrl || `https://unavatar.io/x/${u.screenName}`,
-              score: Math.min(99, Math.max(10, score)),
-              rank: i < 6 ? 'S' : i < 18 ? 'A' : i < 35 ? 'B' : 'C',
-              ring: (i < 6 ? 1 : i < 18 ? 2 : 3) as 1 | 2 | 3,
-              relationship,
-              interactions: {
-                replies: Math.max(1, Math.round((u.interactionCount || 1) * 1.5)),
-                quotes: Math.round((u.interactionCount || 1) * 0.3),
-                retweets: Math.round((u.interactionCount || 1) * 0.8),
-                mentions: Math.round((u.interactionCount || 1) * 0.4),
-                total: u.interactionCount || 2,
-              },
-              badges,
-            };
-          });
-
-          break; // successfully fetched real data!
-        }
-      }
-    } catch {
-      // CORS block or network restriction
-      continue;
-    }
-  }
-
-  // 3. If real interaction data could not be fetched due to CORS restrictions:
-  if (circleUsers.length === 0) {
-    if (!realProfile) {
-      throw new Error(
-        `未能连接到推特数据源，请检查账号 @${cleanHandle} 是否存在，或使用「本地归档」享受 100% 真实离线解析。`
-      );
+    let relationship: RelationshipType = 'mutual';
+    if (toYou > 0 && fromYou > 0) {
+      relationship = 'mutual';
+      mutualCount += 1;
+    } else if (toYou > fromYou) {
+      relationship = 'fan';
+      fanCount += 1;
+    } else {
+      relationship = 'admire';
+      admireCount += 1;
     }
 
-    // Inform user honestly about CORS limitation rather than faking celebrities
-    throw new Error(
-      `已成功获取到 @${cleanHandle} 的真实档案，但推特互动圈公开搜索受浏览器跨域（CORS）限制。建议点击「本地归档」直接拖入你的推特导出包，即可 100% 真实本地生成全量互动圈！`
-    );
-  }
+    const badges: string[] = [];
+    if (i < 3) badges.push('核心挚友');
+    if (toYou > 0 && fromYou > 0) badges.push('双向奔赴');
+    else if (toYou > 2) badges.push('死忠守护');
+    else if (fromYou > 2) badges.push('重点关注');
 
-  const innerRing = circleUsers.filter((u) => u.ring === 1);
-  const middleRing = circleUsers.filter((u) => u.ring === 2);
-  const outerRing = circleUsers.filter((u) => u.ring === 3);
+    if (u.interactionCount >= 5) badges.push('高频互动');
+    else if (badges.length === 0) badges.push('常客互动');
 
-  const targetName = realProfile?.name || cleanHandle;
+    const repliesCount = Math.max(1, toYou + fromYou);
+    const score = Math.min(99, Math.max(12, Math.round(u.interactionScore || (u.interactionCount * 10))));
+
+    // Determine ring and rank
+    const ring = (i < 6 ? 1 : i < 18 ? 2 : 3) as 1 | 2 | 3;
+    const rank = (i < 6 ? 'S' : i < 18 ? 'A' : i < 35 ? 'B' : 'C') as 'S' | 'A' | 'B' | 'C';
+
+    const avatar =
+      u.avatarUrl ||
+      `https://unavatar.io/x/${u.screenName}`;
+
+    return {
+      id: u.id || `real-${i}-${u.screenName}`,
+      name: u.displayName || u.screenName,
+      handle: u.screenName,
+      avatar,
+      score,
+      rank,
+      ring,
+      relationship,
+      interactions: {
+        replies: repliesCount,
+        quotes: Math.round(repliesCount * 0.25),
+        retweets: Math.max(0, u.interactionCount - repliesCount),
+        mentions: Math.round(repliesCount * 0.4),
+        total: u.interactionCount || repliesCount,
+      },
+      badges,
+    };
+  });
+
+  const innerRing = scoredUsers.filter((u) => u.ring === 1);
+  const middleRing = scoredUsers.filter((u) => u.ring === 2);
+  const outerRing = scoredUsers.filter((u) => u.ring === 3);
+
+  const totalInteractions = rawData.counts
+    ? rawData.counts.mentionsToYou + rawData.counts.mentionsFromYou
+    : scoredUsers.reduce((sum, u) => sum + u.interactions.total, 0);
+
+  const mutualRatio = scoredUsers.length > 0
+    ? Math.round((mutualCount / scoredUsers.length) * 100)
+    : 70;
+
+  const targetName = fxProfile?.name || cleanHandle;
   const targetAvatar =
-    realProfile?.avatar_url || `https://unavatar.io/x/${cleanHandle}`;
-  const targetBio = realProfile?.description || `@${cleanHandle} 的 X 互动全景`;
+    rawData.selfAvatarUrl ||
+    fxProfile?.avatar_url ||
+    `https://unavatar.io/x/${cleanHandle}`;
+  const targetBio = fxProfile?.description || `@${cleanHandle} 的 X 真实互动社交全景`;
 
   return {
     targetUser: {
@@ -151,12 +181,12 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     innerRing,
     middleRing,
     outerRing,
-    allUsers: circleUsers,
+    allUsers: scoredUsers,
     generatedAt: new Date().toISOString(),
     source: 'online',
     stats: {
       totalInteractions,
-      mutualRatio: Math.round((mutualCount / Math.max(1, circleUsers.length)) * 100) || 75,
+      mutualRatio,
       topInteractionType: 'replies',
     },
   };
