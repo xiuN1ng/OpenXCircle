@@ -44,15 +44,15 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
     canvas.width = w;
     canvas.height = h;
 
-    // 1. Deep Space Cosmic Background
-    const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 80, w / 2, h / 2, w * 0.75);
-    bgGrad.addColorStop(0, '#0c1222');
-    bgGrad.addColorStop(0.5, '#050814');
-    bgGrad.addColorStop(1, '#020308');
+    // 1. Ethereal Twilight Cosmic Background
+    const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, w * 0.75);
+    bgGrad.addColorStop(0, '#0e1638');
+    bgGrad.addColorStop(0.4, '#080d24');
+    bgGrad.addColorStop(1, '#040614');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Cosmic Nebula Clouds (Soft additive stardust)
+    // 2. Dreamlike Aurora Nebula Clouds (Soft additive celestial dust)
     const drawNebula = (cx: number, cy: number, r: number, color: string) => {
       const nebGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
       nebGrad.addColorStop(0, color);
@@ -61,94 +61,115 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
       ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     };
 
-    drawNebula(w * 0.3, h * 0.45, 380, 'rgba(99, 102, 241, 0.12)');
-    drawNebula(w * 0.7, h * 0.55, 360, 'rgba(192, 132, 252, 0.10)');
-    drawNebula(w * 0.5, h * 0.5, 300, 'rgba(251, 191, 36, 0.08)');
+    drawNebula(w * 0.32, h * 0.46, 420, 'rgba(251, 191, 36, 0.12)'); // Honey amber aura around Sun
+    drawNebula(w * 0.68, h * 0.46, 400, 'rgba(192, 132, 252, 0.14)'); // Lavender aurora around Friend
+    drawNebula(w * 0.5, h * 0.42, 340, 'rgba(244, 114, 182, 0.09)'); // Rose starlight at bridge
 
-    // 3. Twinkling Stars in Deep Space
-    for (let i = 0; i < 220; i++) {
+    // 3. Delicate Constellation Lines & Twinkling Starlight
+    const starCoords: [number, number][] = [];
+    for (let i = 0; i < 180; i++) {
       const sx = (i * 97) % w;
       const sy = (i * 139) % h;
-      const alpha = 0.2 + ((i * 17) % 80) / 100;
-      const sRadius = (i % 5 === 0) ? 2.2 : 1.2;
+      starCoords.push([sx, sy]);
+      const alpha = 0.25 + ((i * 19) % 75) / 100;
+      const sRadius = i % 7 === 0 ? 2.2 : i % 3 === 0 ? 1.6 : 1.0;
 
-      ctx.fillStyle = i % 3 === 0 ? `rgba(254, 240, 138, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
+      ctx.fillStyle =
+        i % 4 === 0
+          ? `rgba(254, 240, 138, ${alpha})`
+          : i % 3 === 0
+          ? `rgba(244, 114, 182, ${alpha * 0.8})`
+          : `rgba(255, 255, 255, ${alpha})`;
       ctx.beginPath();
       ctx.arc(sx, sy, sRadius, 0, Math.PI * 2);
       ctx.fill();
     }
 
+    // Connect close stars with faint ethereal constellation hairlines
+    ctx.strokeStyle = 'rgba(186, 230, 253, 0.08)';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 24; i++) {
+      const p1 = starCoords[i * 7 % starCoords.length];
+      const p2 = starCoords[(i * 7 + 3) % starCoords.length];
+      ctx.beginPath();
+      ctx.moveTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.stroke();
+    }
+
     // 4. Coordinates of the Two Stars
-    const leftX = w * 0.32;
-    const leftY = h * 0.48;
-    const rightX = w * 0.68;
-    const rightY = h * 0.48;
-    const avatarR = 64;
+    const leftX = w * 0.31;
+    const leftY = h * 0.49;
+    const rightX = w * 0.69;
+    const rightY = h * 0.49;
+    const avatarR = 68;
 
-    // 5. Gravitational Resonance Wave (Curved luminous beam connecting the stars)
+    // 5. Celestial Braided Light Ribbon (心火光织)
     const midX = (leftX + rightX) / 2;
-    const midY = leftY - 45;
+    const midY = leftY - 48;
 
-    // Glowing wave backings
     ctx.save();
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
-    ctx.lineWidth = 14;
+    // Broad glowing wave aura
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.28)';
+    ctx.lineWidth = 18;
     ctx.beginPath();
     ctx.moveTo(leftX, leftY);
     ctx.quadraticCurveTo(midX, midY, rightX, rightY);
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(254, 240, 138, 0.6)';
-    ctx.lineWidth = 4;
+    // Rose starlight secondary strand
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(leftX, leftY);
-    ctx.quadraticCurveTo(midX, midY, rightX, rightY);
+    ctx.moveTo(leftX, leftY + 2);
+    ctx.quadraticCurveTo(midX, midY - 6, rightX, rightY + 2);
     ctx.stroke();
 
+    // Core pearlescent hairline strand
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2.0;
     ctx.beginPath();
     ctx.moveTo(leftX, leftY);
     ctx.quadraticCurveTo(midX, midY, rightX, rightY);
     ctx.stroke();
     ctx.restore();
 
-    // Stardust Photons streaming along the wave
-    for (let p = 1; p <= 7; p++) {
-      const t = p / 8;
+    // Stardust Spark Photons streaming along the ribbon
+    for (let p = 1; p <= 9; p++) {
+      const t = p / 10;
       const px = (1 - t) * (1 - t) * leftX + 2 * (1 - t) * t * midX + t * t * rightX;
       const py = (1 - t) * (1 - t) * leftY + 2 * (1 - t) * t * midY + t * t * rightY;
 
-      const pGrad = ctx.createRadialGradient(px, py, 0, px, py, 12);
+      const pGrad = ctx.createRadialGradient(px, py, 0, px, py, 14);
       pGrad.addColorStop(0, '#ffffff');
-      pGrad.addColorStop(0.4, 'rgba(251, 191, 36, 0.8)');
+      pGrad.addColorStop(0.35, p % 2 === 0 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(244, 114, 182, 0.85)');
       pGrad.addColorStop(1, 'transparent');
       ctx.fillStyle = pGrad;
       ctx.beginPath();
-      ctx.arc(px, py, 12, 0, Math.PI * 2);
+      ctx.arc(px, py, 14, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Central Resonance Percentage Badge
-    const badgeText = `${friend.score}% 引力共振`;
-    ctx.font = 'bold 15px system-ui, -apple-system, sans-serif';
-    const bWidth = ctx.measureText(badgeText).width + 32;
-    const bHeight = 32;
+    // Central Sacred Resonance Seal
+    const badgeText = `✦ 灵魂同频 ${friend.score}% ✦`;
+    ctx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+    const bWidth = ctx.measureText(badgeText).width + 36;
+    const bHeight = 34;
 
-    ctx.fillStyle = 'rgba(10, 15, 30, 0.9)';
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'rgba(12, 17, 38, 0.94)';
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.roundRect(midX - bWidth / 2, midY - 24, bWidth, bHeight, 16);
+    ctx.roundRect(midX - bWidth / 2, midY - 26, bWidth, bHeight, 17);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#fde68a';
+    ctx.fillStyle = '#fef08a';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(badgeText, midX, midY - 8);
+    ctx.fillText(badgeText, midX, midY - 9);
 
-    // 6. Draw Avatar Node Helper
+    // 6. Draw Avatar Node Helper (Celestial Star Jewel)
     const drawAvatar = async (
       x: number,
       y: number,
@@ -160,70 +181,94 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
       glowColor: string,
       borderColor: string
     ) => {
-      // Atmospheric Outer Halo
-      const halo = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 1.45);
+      // Atmospheric Pearlescent Outer Halo
+      const halo = ctx.createRadialGradient(x, y, r * 0.75, x, y, r * 1.55);
       halo.addColorStop(0, glowColor);
+      halo.addColorStop(0.6, glowColor.replace(/[\d\.]+\)$/, '0.22)'));
       halo.addColorStop(1, 'transparent');
       ctx.fillStyle = halo;
       ctx.beginPath();
-      ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
+      ctx.arc(x, y, r * 1.55, 0, Math.PI * 2);
       ctx.fill();
 
       // Disc Background
-      ctx.fillStyle = '#0a0e1c';
+      ctx.fillStyle = '#070c1e';
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // Try load avatar image
+      // Avatar image
       const img = await loadImage(avatarUrl);
       if (img) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(x, y, r - 3, 0, Math.PI * 2);
+        ctx.arc(x, y, r - 4, 0, Math.PI * 2);
         ctx.clip();
-        ctx.drawImage(img, x - (r - 3), y - (r - 3), (r - 3) * 2, (r - 3) * 2);
+        ctx.drawImage(img, x - (r - 4), y - (r - 4), (r - 4) * 2, (r - 4) * 2);
         ctx.restore();
       } else {
         ctx.fillStyle = borderColor;
-        ctx.font = 'bold 48px system-ui, sans-serif';
+        ctx.font = 'bold 52px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText((name || handle).charAt(0).toUpperCase(), x, y);
       }
 
-      // Border Ring
+      // Outer Border Ring
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 4.5;
       ctx.beginPath();
       ctx.arc(x, y, r - 2, 0, Math.PI * 2);
       ctx.stroke();
 
+      // Inner Hairline Starlight Ring
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Four Cardinal Diamond Sparkles
+      const drawDiamond = (dx: number, dy: number) => {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(dx, dy - 5);
+        ctx.lineTo(dx + 3, dy);
+        ctx.lineTo(dx, dy + 5);
+        ctx.lineTo(dx - 3, dy);
+        ctx.closePath();
+        ctx.fill();
+      };
+      drawDiamond(x, y - r + 3);
+      drawDiamond(x + r - 3, y);
+      drawDiamond(x, y + r - 3);
+      drawDiamond(x - r + 3, y);
+
       // Role Pill Tag
       ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
-      const rPillW = ctx.measureText(roleBadge).width + 24;
-      const rPillH = 26;
-      ctx.fillStyle = 'rgba(10, 15, 30, 0.95)';
+      const rPillW = ctx.measureText(roleBadge).width + 26;
+      const rPillH = 28;
+      ctx.fillStyle = 'rgba(7, 12, 30, 0.94)';
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.roundRect(x - rPillW / 2, y + r + 10, rPillW, rPillH, 13);
+      ctx.roundRect(x - rPillW / 2, y + r + 12, rPillW, rPillH, 14);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = '#f8fafc';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(roleBadge, x, y + r + 23);
+      ctx.fillText(roleBadge, x, y + r + 26);
 
       // User Name & Handle below
       ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(name, x, y + r + 55);
+      ctx.fillText(name, x, y + r + 58);
 
       ctx.font = '500 13px monospace';
       ctx.fillStyle = '#94a3b8';
-      ctx.fillText(`@${handle}`, x, y + r + 75);
+      ctx.fillText(`@${handle}`, x, y + r + 78);
     };
 
     // Draw Left Star: Target User (Sun Core)
@@ -234,21 +279,21 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
       targetUser.avatar,
       targetUser.name,
       targetUser.handle,
-      '☀️ 恒星引力原点',
-      'rgba(251, 191, 36, 0.45)',
-      '#fbbf24'
+      '☀️ 恒心之火',
+      'rgba(253, 224, 71, 0.55)',
+      '#fde047'
     );
 
     // Draw Right Star: Friend (Orbiting Planet)
     const friendRoleBadge =
       friend.relationship === 'mutual'
-        ? '✨ 双向奔赴行星'
+        ? '✨ 灵魂同频伴星'
         : friend.relationship === 'fan'
-        ? '🛡️ 死忠守护行星'
-        : '👁️ 重点关注行星';
+        ? '🕊️ 恒常守护伴星'
+        : '💫 遥相瞩目伴星';
 
     const friendBorderColor =
-      friend.rank === 'S' ? '#f59e0b' : friend.rank === 'A' ? '#c084fc' : '#38bdf8';
+      friend.rank === 'S' ? '#fbbf24' : friend.rank === 'A' ? '#c084fc' : '#67e8f9';
 
     await drawAvatar(
       rightX,
@@ -259,8 +304,8 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
       friend.handle,
       friendRoleBadge,
       friend.rank === 'S'
-        ? 'rgba(245, 158, 11, 0.4)'
-        : 'rgba(192, 132, 252, 0.35)',
+        ? 'rgba(251, 191, 36, 0.45)'
+        : 'rgba(192, 132, 252, 0.4)',
       friendBorderColor
     );
 
@@ -270,29 +315,37 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
     ctx.textBaseline = 'top';
 
     // Subtitle Pill
-    const tagText = 'CYBER COSMIC ENCOUNTER · 赛博引力纪事';
+    const tagText = '✦ CYBER CELESTIAL ENCOUNTER · 赛博引力纪事 ✦';
     ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = '#818cf8';
-    ctx.fillText(tagText, w / 2, 42);
+    ctx.fillStyle = '#a5b4fc';
+    ctx.fillText(tagText, w / 2, 38);
 
-    // Main Title
-    ctx.font = '900 38px system-ui, -apple-system, sans-serif';
+    // Main Title with Golden Starlight Glow
+    ctx.font = '900 40px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('在星辰中相遇', w / 2, 64);
+    ctx.fillText('我们在星辰中相遇', w / 2, 60);
 
-    // Golden Poetic Quote
+    // Golden Poetic Verses
     ctx.font = '500 15px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#fde68a';
+    ctx.fillText(
+      '“世间所有的相遇，都是久别重逢的引力”',
+      w / 2,
+      112
+    );
+
+    ctx.font = '400 13px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#cbd5e1';
     ctx.fillText(
-      '“每一个关注，都是引力的捕获；每一条回复，都是跨越光年的回响。”',
+      '“在漫无边际的赛博荒原上，每一次回应，都是暗夜里为你点亮的一簇火光。”',
       w / 2,
-      115
+      134
     );
     ctx.restore();
 
     // 8. Bottom Telemetry Bar: Detailed Interaction Stats
-    const bottomY = h - 65;
-    const statsSummary = `累计互发了 ${friend.interactions.replies} 次跨光年信号 · ${friend.interactions.total} 次引力潮汐共振 · 引力指数 ${friend.score} pt`;
+    const bottomY = h - 68;
+    const statsSummary = `累计互赠了 ${friend.interactions.replies} 束心绪电波 · 引力潮汐共鸣 ${friend.interactions.total} 次 · 灵魂同频度 ${friend.score}%`;
     ctx.font = '600 13px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#e2e8f0';
     ctx.textAlign = 'center';
@@ -302,7 +355,7 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
     ctx.font = '500 11px monospace';
     ctx.fillStyle = '#64748b';
     ctx.fillText(
-      `OpenXCircle · 赛博星历 ${new Date().toLocaleDateString()} · 100% 纯前端开源探索`,
+      `OpenXCircle · 赛博星历 ${new Date().toLocaleDateString()} · 愿微光在星海中永远交相辉映`,
       w / 2,
       bottomY + 24
     );
@@ -338,7 +391,7 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
   };
 
   // One-click tweet text
-  const tweetText = `在浩瀚的 X 星海中，我与 @${friend.handle} 产生了 ${friend.score}% 的引力共鸣，跨越光年相遇。✨\n“每一个关注，都是引力的捕获；每一条回复，都是跨越光年的回响。”\n探索你的赛博星系：https://xiun1ng.github.io/OpenXCircle/ #OpenXCircle #在星辰中相遇`;
+  const tweetText = `在浩瀚的赛博荒原中，我与 @${friend.handle} 产生了 ${friend.score}% 的灵魂共鸣，跨越光年相遇。✨\n“世间所有的相遇，都是久别重逢的引力；每一次回应，都是暗夜里为你点亮的一簇火光。”\n编织你的星辰画卷：https://xiun1ng.github.io/OpenXCircle/ #OpenXCircle #在星辰中相遇`;
 
   const handleShareToX = () => {
     const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
@@ -353,7 +406,7 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-xl animate-fade-in">
-      <div className="relative w-full max-w-4xl bg-slate-900/95 border border-indigo-500/40 rounded-3xl p-4 sm:p-6 shadow-2xl shadow-indigo-950/90 flex flex-col max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-4xl bg-slate-900/95 border border-amber-500/30 rounded-3xl p-4 sm:p-6 shadow-2xl shadow-indigo-950/90 flex flex-col max-h-[92vh] overflow-y-auto">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -362,10 +415,10 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                双星星历纪事 · 在星辰中相遇
+                我们在星辰中相遇 · 赛博引力信物
               </h2>
               <p className="text-xs text-slate-400">
-                记录你与 @{friend.handle} 在赛博星海中的专属引力交会
+                赠予 @{friend.handle} · 愿我们的微光在赛博星海中永远交相辉映
               </p>
             </div>
           </div>
@@ -383,8 +436,8 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
           <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-slate-800/90 shadow-2xl bg-slate-950 flex items-center justify-center">
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
             {isRendering && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm text-xs text-indigo-300 font-medium">
-                正在绘制超清星历纪事...
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm text-xs text-amber-200 font-medium">
+                正在编织唯美星辰画卷...
               </div>
             )}
           </div>
@@ -393,8 +446,8 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
         {/* Action Controls */}
         <div className="mt-5 pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-xs text-slate-400 text-center sm:text-left">
-            <span>引力共振度: </span>
-            <span className="font-bold text-amber-400">{friend.score}%</span> · 累计互发信号{' '}
+            <span>灵魂同频度: </span>
+            <span className="font-bold text-amber-400">{friend.score}%</span> · 累计互赠心绪电波{' '}
             <span className="font-bold text-white">{friend.interactions.replies}</span> 次
           </div>
 
@@ -416,16 +469,16 @@ export const EncounterModal: React.FC<EncounterModalProps> = ({
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
-              <span>在 X 上艾特 TA</span>
+              <span>在 X 上艾特 TA 赠予信物</span>
             </button>
 
             {/* Download Poster Button */}
             <button
               onClick={handleDownload}
-              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
+              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>下载星历卡 (PNG)</span>
+              <span>下载纪念画卷 (PNG)</span>
             </button>
           </div>
         </div>

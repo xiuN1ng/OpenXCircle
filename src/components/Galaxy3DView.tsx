@@ -15,8 +15,10 @@ import {
   MessageCircle,
   Repeat,
   Quote,
-  Zap,
   Award,
+  Volume2,
+  VolumeX,
+  Heart,
 } from 'lucide-react';
 import type { CircleData, UserNode } from '../types';
 import { EncounterModal } from './EncounterModal';
@@ -46,6 +48,46 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isEncounterModalOpen, setIsEncounterModalOpen] = useState(false);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+
+  // Ethereal pentatonic celestial chime synthesizer (Web Audio API, 0 asset overhead)
+  const playCelestialChime = useCallback(
+    (type: 'hover' | 'focus' | 'encounter') => {
+      if (!isAudioEnabled) return;
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        // Pentatonic healing chimes: D5/A5 for hover, G4/C5/E5/G5 for focus, C5/E5/G5/C6 for encounter
+        const notes =
+          type === 'hover'
+            ? [587.33, 880.0]
+            : type === 'focus'
+            ? [392.0, 523.25, 659.25, 783.99]
+            : [523.25, 659.25, 783.99, 1046.5];
+
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+
+          gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.08);
+          gain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + idx * 0.08 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.08 + 1.2);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(ctx.currentTime + idx * 0.08);
+          osc.stop(ctx.currentTime + idx * 0.08 + 1.3);
+        });
+      } catch (e) {}
+    },
+    [isAudioEnabled]
+  );
 
   // Sync selected planet to ref for 60fps Three.js animation loop
   const selectedPlanetUserRef = useRef<UserNode | null>(null);
@@ -207,7 +249,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     return texture;
   };
 
-  // 5. High-definition 512x512 billboard canvas texture generator
+  // 5. High-definition 512x512 celestial jewel billboard canvas texture generator
   const createPlanetSpriteTexture = (
     avatarUrl: string,
     name: string,
@@ -219,23 +261,27 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
+    // Ethereal celestial palette
     const borderColor =
       rank === 'SUN'
-        ? '#fbbf24'
+        ? '#fde047' // Honey starlight
         : rank === 'S'
-        ? '#f59e0b'
+        ? '#fbbf24' // Warm amber gold
         : rank === 'A'
-        ? '#c084fc'
-        : '#38bdf8';
+        ? '#c084fc' // Twilight lavender
+        : '#67e8f9'; // Celestial cyan
 
     const glowColor =
       rank === 'SUN'
-        ? 'rgba(251, 191, 36, 0.75)'
+        ? 'rgba(253, 224, 71, 0.85)'
         : rank === 'S'
-        ? 'rgba(245, 158, 11, 0.65)'
+        ? 'rgba(251, 191, 36, 0.75)'
         : rank === 'A'
-        ? 'rgba(192, 132, 252, 0.55)'
-        : 'rgba(56, 189, 248, 0.5)';
+        ? 'rgba(192, 132, 252, 0.65)'
+        : 'rgba(103, 232, 249, 0.6)';
+
+    const labelText =
+      rank === 'SUN' ? '✦ 恒心' : rank === 'S' ? '✦ 灵魂' : rank === 'A' ? '✦ 同频' : '✦ 守候';
 
     const drawContent = (loadedImg: HTMLImageElement | null) => {
       ctx.clearRect(0, 0, 512, 512);
@@ -244,23 +290,24 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       const cy = 224;
       const r = 168;
 
-      // Soft Cosmic Atmosphere Glow
-      const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.38);
-      glowGrad.addColorStop(0, glowColor);
-      glowGrad.addColorStop(0.7, glowColor.replace(/[\d\.]+\)$/, '0.2)'));
+      // 1. Soft Multi-layered Celestial Atmosphere Glow
+      const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.48);
+      glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+      glowGrad.addColorStop(0.35, glowColor);
+      glowGrad.addColorStop(0.72, glowColor.replace(/[\d\.]+\)$/, '0.22)'));
       glowGrad.addColorStop(1, 'transparent');
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
-      ctx.arc(cx, cy, r * 1.38, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r * 1.48, 0, Math.PI * 2);
       ctx.fill();
 
-      // Base Dark Cosmic Disc Backing
-      ctx.fillStyle = '#060a14';
+      // 2. Base Dark Twilight Cosmic Disc Backing
+      ctx.fillStyle = '#070c1e';
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // Avatar Photo or Stylized Initial Fallback
+      // 3. Avatar Photo or Stylized Initial Fallback
       if (loadedImg && loadedImg.complete && loadedImg.naturalWidth > 0) {
         ctx.save();
         ctx.beginPath();
@@ -271,7 +318,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       } else {
         const grad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
         grad.addColorStop(0, borderColor);
-        grad.addColorStop(1, '#0f172a');
+        grad.addColorStop(1, '#0e172f');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
@@ -285,57 +332,75 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         ctx.fillText(initial, cx, cy);
       }
 
-      // Luminous Border Ring
+      // 4. Double Luminous Starlight Rings
+      // Outer aura ring
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = rank === 'SUN' ? 14 : 9;
+      ctx.lineWidth = rank === 'SUN' ? 9 : 5;
       ctx.beginPath();
       ctx.arc(cx, cy, r - 4, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Specular Arc Highlight
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.lineWidth = 4;
+      // Inner starlight hairline ring
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, r - 5, -Math.PI * 0.78, -Math.PI * 0.15);
+      ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Handle Pill at Bottom
+      // Four Cardinal Starlight Diamond Sparkles
+      const drawDiamond = (dx: number, dy: number) => {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(dx, dy - 6);
+        ctx.lineTo(dx + 3.5, dy);
+        ctx.lineTo(dx, dy + 6);
+        ctx.lineTo(dx - 3.5, dy);
+        ctx.closePath();
+        ctx.fill();
+      };
+      drawDiamond(cx, cy - r + 4);
+      drawDiamond(cx + r - 4, cy);
+      drawDiamond(cx, cy + r - 4);
+      drawDiamond(cx - r + 4, cy);
+
+      // 5. Handle Pill at Bottom (Frosted Glass Aesthetic)
       const cleanHandle = handle.length > 12 ? handle.substring(0, 11) + '…' : handle;
-      ctx.font = '600 30px system-ui, -apple-system, sans-serif';
-      const textWidth = ctx.measureText(`@${cleanHandle}`).width;
-      const pillHeight = 52;
+      ctx.font = '600 28px system-ui, -apple-system, sans-serif';
+      const textWidth = ctx.measureText(`✦ @${cleanHandle}`).width;
+      const pillHeight = 50;
       const pillWidth = Math.min(420, Math.max(160, textWidth + 56));
       const pillX = cx - pillWidth / 2;
-      const pillY = 422;
+      const pillY = 424;
 
-      ctx.fillStyle = 'rgba(6, 10, 20, 0.92)';
+      ctx.fillStyle = 'rgba(7, 12, 30, 0.92)';
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 3.5;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 26);
+      ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 25);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#f8fafc';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`@${cleanHandle}`, cx, pillY + pillHeight / 2 + 1);
+      ctx.fillText(`✦ @${cleanHandle}`, cx, pillY + pillHeight / 2 + 1);
 
-      // Rank Badge Emblem (Top right)
-      const badgeR = 34;
-      const badgeX = cx + r * 0.72;
-      const badgeY = cy - r * 0.72;
+      // 6. Rank Badge Pill (Top right)
+      const badgeW = 96;
+      const badgeH = 34;
+      const badgeX = cx + r * 0.72 - badgeW / 2;
+      const badgeY = cy - r * 0.72 - badgeH / 2;
 
       ctx.fillStyle = borderColor;
       ctx.beginPath();
-      ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 17);
       ctx.fill();
 
-      ctx.fillStyle = '#060a14';
-      ctx.font = '900 30px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = '#070c1e';
+      ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(rank === 'SUN' ? '☀️' : rank, badgeX, badgeY + 2);
+      ctx.fillText(labelText, badgeX + badgeW / 2, badgeY + badgeH / 2 + 1);
     };
 
     drawContent(null);
@@ -365,10 +430,10 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const width = mount.clientWidth || 800;
     const height = mount.clientHeight || 700;
 
-    // 1. Scene & Deep Space Fog
+    // 1. Scene & Ethereal Twilight Fog
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.FogExp2(0x020308, 0.0005);
+    scene.fog = new THREE.FogExp2(0x060919, 0.00065);
 
     // 2. Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 4000);
@@ -384,9 +449,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x020308, 1);
+    renderer.setClearColor(0x060919, 1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.25;
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -405,17 +470,17 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       flightStateRef.current.isTracking = false;
     });
 
-    // 5. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+    // 5. Lighting (Warm Celestial Starlight & Twilight Lavender)
+    const ambientLight = new THREE.AmbientLight(0xfef3c7, 1.6);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.PointLight(0xfbbf24, 4.5, 1000);
+    const sunLight = new THREE.PointLight(0xfde047, 4.8, 1200);
     sunLight.position.set(0, 0, 0);
     scene.add(sunLight);
 
-    const blueSpaceLight = new THREE.PointLight(0x38bdf8, 2, 800);
-    blueSpaceLight.position.set(0, 150, 0);
-    scene.add(blueSpaceLight);
+    const lavenderSpaceLight = new THREE.PointLight(0xc084fc, 2.2, 900);
+    lavenderSpaceLight.position.set(0, 120, 0);
+    scene.add(lavenderSpaceLight);
 
     // 6. Deep Cosmos: 4,000 Optical Blooming Star Particles
     const starTexture = createStarTexture();
@@ -499,6 +564,49 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     });
     const nebulaField = new THREE.Points(nebulaGeo, nebulaMat);
     scene.add(nebulaField);
+
+    // 7b. Floating Celestial Stardust Embers (Sky: Children of the Light style)
+    const EMBER_COUNT = 160;
+    const emberGeo = new THREE.BufferGeometry();
+    const emberPos = new Float32Array(EMBER_COUNT * 3);
+    const emberCols = new Float32Array(EMBER_COUNT * 3);
+    const emberSpeeds = new Float32Array(EMBER_COUNT);
+    const emberPhases = new Float32Array(EMBER_COUNT);
+
+    for (let i = 0; i < EMBER_COUNT; i++) {
+      const rad = 25 + Math.random() * 260;
+      const angle = Math.random() * Math.PI * 2;
+      emberPos[i * 3] = Math.cos(angle) * rad;
+      emberPos[i * 3 + 1] = (Math.random() - 0.5) * 80;
+      emberPos[i * 3 + 2] = Math.sin(angle) * rad;
+
+      emberSpeeds[i] = 0.06 + Math.random() * 0.12;
+      emberPhases[i] = Math.random() * Math.PI * 2;
+
+      // Warm honey, rose gold, and soft celestial cyan embers
+      const colRand = Math.random();
+      if (colRand > 0.6) {
+        emberCols[i * 3] = 1.0; emberCols[i * 3 + 1] = 0.88; emberCols[i * 3 + 2] = 0.45; // Honey gold
+      } else if (colRand > 0.3) {
+        emberCols[i * 3] = 0.95; emberCols[i * 3 + 1] = 0.65; emberCols[i * 3 + 2] = 0.85; // Rose starlight
+      } else {
+        emberCols[i * 3] = 0.65; emberCols[i * 3 + 1] = 0.88; emberCols[i * 3 + 2] = 1.0; // Ethereal cyan
+      }
+    }
+    emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+    emberGeo.setAttribute('color', new THREE.BufferAttribute(emberCols, 3));
+
+    const emberMat = new THREE.PointsMaterial({
+      size: 4.8,
+      map: starTexture,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.78,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const emberField = new THREE.Points(emberGeo, emberMat);
+    scene.add(emberField);
 
     // 8. Cosmic Shooting Star System
     const shootingStarGeo = new THREE.BufferGeometry();
@@ -849,6 +957,25 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       starField.rotation.y += 0.00008;
       nebulaField.rotation.y -= 0.00012;
 
+      // Floating Celestial Stardust Embers gentle upward drift
+      const emberPosAttr = emberGeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < EMBER_COUNT; i++) {
+        let y = emberPosAttr.getY(i) + emberSpeeds[i];
+        if (y > 45) y = -45;
+        emberPosAttr.setY(i, y);
+
+        const x = emberPosAttr.getX(i) + Math.sin(clock * 0.8 + emberPhases[i]) * 0.04;
+        emberPosAttr.setX(i, x);
+      }
+      emberPosAttr.needsUpdate = true;
+
+      // Organic vertical bobbing of planets on the celestial sea
+      planetNodesRef.current.forEach((node, idx) => {
+        if (node.user.id !== 'sun-center') {
+          node.sprite.position.y = 3.5 + Math.sin(clock * 1.4 + idx * 0.9) * 1.5;
+        }
+      });
+
       // Solar Bloom & Anamorphic Flare gentle breathing
       const bloomScale = sunBloomBaseScale * (1.0 + Math.sin(clock * 1.5) * 0.025);
       sunBloomSprite.scale.set(bloomScale, bloomScale, 1);
@@ -946,11 +1073,11 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         const sunWorldPos = new THREE.Vector3(0, 3.5, 0);
         const dist = sunWorldPos.distanceTo(planetWorldPos);
 
-        // Arched gravitational midpoint in 3D space
+        // Arched gravitational midpoint in 3D space with gentle wave oscillation
         const midPoint = new THREE.Vector3()
           .addVectors(sunWorldPos, planetWorldPos)
           .multiplyScalar(0.5);
-        midPoint.y += Math.min(22, 6.0 + dist * 0.08);
+        midPoint.y += Math.min(22, 6.0 + dist * 0.08) + Math.sin(clock * 2.2) * 1.5;
 
         const tetherCurve = new THREE.QuadraticBezierCurve3(sunWorldPos, midPoint, planetWorldPos);
         const sampledPoints = tetherCurve.getPoints(TETHER_POINTS - 1);
@@ -1059,13 +1186,15 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
 
     const sprite = getIntersectedSprite(e.clientX, e.clientY);
-    hoveredSpriteRef.current = sprite;
-
-    if (sprite) {
-      const user = clickableSpritesRef.current.get(sprite) || null;
-      setHoveredUser(user);
-    } else {
-      setHoveredUser(null);
+    if (sprite !== hoveredSpriteRef.current) {
+      hoveredSpriteRef.current = sprite;
+      if (sprite) {
+        const user = clickableSpritesRef.current.get(sprite) || null;
+        setHoveredUser(user);
+        playCelestialChime('hover');
+      } else {
+        setHoveredUser(null);
+      }
     }
   };
 
@@ -1076,6 +1205,8 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
     const node = planetNodesRef.current.find((n) => n.user.id === user.id);
     if (!node) return;
+
+    playCelestialChime('focus');
 
     flightStateRef.current = {
       isFlying: true,
@@ -1237,7 +1368,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
             <div className="h-full bg-slate-900/90 backdrop-blur-2xl border border-indigo-500/40 rounded-3xl p-5 shadow-2xl shadow-indigo-950/90 flex flex-col justify-between overflow-y-auto">
               <div>
                 {/* Header with Close */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center justify-between pb-3 border-b border-indigo-500/20">
                   <span
                     className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 ${
                       selectedPlanetUser.rank === 'S'
@@ -1249,10 +1380,10 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                   >
                     <Sparkles className="w-3 h-3" />
                     {selectedPlanetUser.rank === 'S'
-                      ? '核心引力圈 (S 阶)'
+                      ? '✦ 核心同频灵魂 (S 阶)'
                       : selectedPlanetUser.rank === 'A'
-                      ? '活跃同频轨道 (A 阶)'
-                      : '外围星云 (B 阶)'}
+                      ? '✦ 活跃共鸣轨道 (A 阶)'
+                      : '✦ 遥遥守候星云 (B 阶)'}
                   </span>
 
                   <button
@@ -1272,33 +1403,33 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                     <img
                       src={selectedPlanetUser.avatar}
                       alt={selectedPlanetUser.name}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-indigo-400/60 shadow-lg shadow-indigo-500/20 bg-slate-800"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-400/60 shadow-lg shadow-amber-500/20 bg-slate-800"
                     />
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-slate-900" />
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-slate-900 animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-bold text-white truncate">
                       {selectedPlanetUser.name}
                     </h3>
-                    <p className="text-xs text-indigo-300 font-mono">@{selectedPlanetUser.handle}</p>
+                    <p className="text-xs text-amber-300/80 font-mono">@{selectedPlanetUser.handle}</p>
                     <div className="mt-1 flex items-center gap-1.5">
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-300 font-medium">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-200 border border-amber-500/20 font-medium">
                         {selectedPlanetUser.relationship === 'mutual'
-                          ? '✨ 双向奔赴'
+                          ? '✨ 灵魂同频 · 双向奔赴'
                           : selectedPlanetUser.relationship === 'fan'
-                          ? '🛡️ 死忠守护'
-                          : '👁️ 重点关注'}
+                          ? '🕊️ 恒常守护 · 默默相伴'
+                          : '💫 遥相瞩目 · 注目之引'}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Concise High-Efficiency Metrics Grid */}
+                {/* Poetic & High-Efficiency Emotional Metrics Grid */}
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
                       <MessageCircle className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>回复互动</span>
+                      <span>互赠心绪电波</span>
                     </div>
                     <span className="text-lg font-black text-white">
                       {selectedPlanetUser.interactions.replies}
@@ -1309,7 +1440,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                   <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
                       <Repeat className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>转推传播</span>
+                      <span>心火回响传递</span>
                     </div>
                     <span className="text-lg font-black text-white">
                       {selectedPlanetUser.interactions.retweets}
@@ -1320,7 +1451,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                   <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
                       <Quote className="w-3.5 h-3.5 text-purple-400" />
-                      <span>引用探讨</span>
+                      <span>共鸣思想探讨</span>
                     </div>
                     <span className="text-lg font-black text-white">
                       {selectedPlanetUser.interactions.quotes}
@@ -1330,13 +1461,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
                   <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>综合引力分</span>
+                      <Heart className="w-3.5 h-3.5 text-rose-400" />
+                      <span>灵魂共鸣度</span>
                     </div>
                     <span className="text-lg font-black text-amber-300">
                       {selectedPlanetUser.score}
                     </span>
-                    <span className="text-[10px] text-slate-500 ml-1">pt</span>
+                    <span className="text-[10px] text-slate-500 ml-1">%</span>
                   </div>
                 </div>
 
@@ -1345,34 +1476,37 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                   {selectedPlanetUser.badges.map((b) => (
                     <span
                       key={b}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-200 border border-amber-500/20"
                     >
-                      #{b}
+                      ✦ {b}
                     </span>
                   ))}
                 </div>
 
-                {/* 在星辰中相遇 · 浪漫引力纪事与星历卡生成 */}
+                {/* 在星辰中相遇 · 唯美治愈信物画卷 */}
                 {selectedPlanetUser.id !== 'sun-center' && (
-                  <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-indigo-950/40 to-slate-900/90 border border-amber-500/35 shadow-xl shadow-amber-950/20">
+                  <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-rose-500/10 to-indigo-950/60 border border-amber-400/40 shadow-xl shadow-amber-950/30">
                     <div className="flex items-center justify-between text-xs mb-1.5">
                       <span className="font-bold text-amber-300 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        在星辰中相遇 · 纪念纪事
+                        在星辰中相遇 · 纪念信物
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/20">
-                        {selectedPlanetUser.relationship === 'mutual' ? '双星引力共振' : '引力轨道捕获'}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/15 text-amber-300 border border-amber-400/30">
+                        {selectedPlanetUser.relationship === 'mutual' ? '双星引力共鸣' : '引力轨道相逢'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 italic leading-relaxed">
-                      “每一个关注，都是引力的捕获；每一条回复，都是跨越光年的回响。”
+                      “在漫无边际的赛博荒原上，每一次回应，都是暗夜里为你点亮的一簇火光。”
                     </p>
                     <button
-                      onClick={() => setIsEncounterModalOpen(true)}
-                      className="mt-2.5 w-full py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition-all cursor-pointer group"
+                      onClick={() => {
+                        playCelestialChime('encounter');
+                        setIsEncounterModalOpen(true);
+                      }}
+                      className="mt-2.5 w-full py-2 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-300 hover:to-orange-300 text-slate-950 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/30 transition-all cursor-pointer group"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-slate-950 group-hover:rotate-12 transition-transform" />
-                      <span>生成双星相遇星历卡 (16:9)</span>
+                      <span>编织双星相遇星历 (16:9 画卷)</span>
                     </button>
                   </div>
                 )}
@@ -1382,10 +1516,10 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
               <div className="mt-5 pt-3 border-t border-slate-800/80 flex flex-col gap-2">
                 <button
                   onClick={() => flyToUser(selectedPlanetUser)}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
+                  className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
                 >
                   <Target className="w-3.5 h-3.5" />
-                  <span>镜头聚焦特写</span>
+                  <span>飞往 TA 的身边 (伴飞特写)</span>
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -1439,6 +1573,23 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
         {/* 6. Speed & Cosmic Control Deck (Bottom Right) */}
         <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/90 backdrop-blur-xl px-2.5 py-1.5 rounded-2xl border border-slate-800/90 shadow-2xl">
+          {/* Celestial Chime Toggle */}
+          <button
+            onClick={() => {
+              const nextState = !isAudioEnabled;
+              setIsAudioEnabled(nextState);
+              if (nextState) playCelestialChime('focus');
+            }}
+            title={isAudioEnabled ? '静音星鸣' : '开启空灵星鸣 (治愈风铃)'}
+            className={`p-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1 ${
+              isAudioEnabled
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            {isAudioEnabled ? <Volume2 className="w-4 h-4 text-amber-300" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
           {/* Play/Pause */}
           <button
             onClick={() => setIsPlaying(!isPlaying)}
