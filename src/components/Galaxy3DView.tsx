@@ -16,6 +16,7 @@ import {
   Repeat,
   Quote,
   Zap,
+  Award,
 } from 'lucide-react';
 import type { CircleData, UserNode } from '../types';
 import { EncounterModal } from './EncounterModal';
@@ -59,10 +60,24 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const controlsRef = useRef<OrbitControls | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  // Cinematic Camera Glide State
-  const cameraTargetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 180, 250));
-  const controlsTargetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
-  const isCinematicMovingRef = useRef<boolean>(false);
+  // Cinematic Camera Flight & Tracking State
+  const flightStateRef = useRef<{
+    isFlying: boolean;
+    isTracking: boolean;
+    startTime: number;
+    duration: number;
+    startCamPos: THREE.Vector3;
+    startTargetPos: THREE.Vector3;
+    targetNode: PlanetNodeRef | null;
+  }>({
+    isFlying: false,
+    isTracking: false,
+    startTime: 0,
+    duration: 1100,
+    startCamPos: new THREE.Vector3(0, 180, 250),
+    startTargetPos: new THREE.Vector3(0, 0, 0),
+    targetNode: null,
+  });
 
   // Groups & Objects
   const innerOrbitGroupRef = useRef<THREE.Group | null>(null);
@@ -379,10 +394,16 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 60;
-    controls.maxDistance = 750;
+    controls.minDistance = 15;
+    controls.maxDistance = 850;
     controls.maxPolarAngle = Math.PI / 2 + 0.35;
     controlsRef.current = controls;
+
+    // Relinquish automated camera flight when user manually drags with mouse
+    controls.addEventListener('start', () => {
+      flightStateRef.current.isFlying = false;
+      flightStateRef.current.isTracking = false;
+    });
 
     // 5. Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
@@ -766,19 +787,62 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       animFrameRef.current = requestAnimationFrame(animate);
       clock += 0.02;
 
-      controls.update();
+      // Cinematic Camera Flight & Planet Tracking Controller
+      const flight = flightStateRef.current;
+      if (flight.isFlying) {
+        const now = performance.now();
+        const elapsed = now - flight.startTime;
+        const progress = Math.min(1.0, elapsed / flight.duration);
+        // Smooth cubic ease-in-out
+        const ease =
+          progress < 0.5
+            ? 4 * progress * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-      // Cinematic Camera Glide to Target
-      if (isCinematicMovingRef.current) {
-        camera.position.lerp(cameraTargetPosRef.current, 0.05);
-        controls.target.lerp(controlsTargetPosRef.current, 0.05);
+        let endTarget = new THREE.Vector3(0, 0, 0);
+        let endCam = new THREE.Vector3(0, 180, 250);
 
-        if (
-          camera.position.distanceTo(cameraTargetPosRef.current) < 1.0 &&
-          controls.target.distanceTo(controlsTargetPosRef.current) < 1.0
-        ) {
-          isCinematicMovingRef.current = false;
+        if (flight.targetNode) {
+          if (flight.targetNode.user.id === 'sun-center') {
+            endTarget = new THREE.Vector3(0, 3.5, 0);
+            endCam = new THREE.Vector3(0, 24, 75);
+          } else {
+            const pWorld = new THREE.Vector3();
+            flight.targetNode.sprite.getWorldPosition(pWorld);
+            endTarget = pWorld;
+
+            // Frame planet: offset outward radially and slightly elevated
+            const radialDir = new THREE.Vector3(pWorld.x, 0, pWorld.z).normalize();
+            if (radialDir.lengthSq() < 0.01) radialDir.set(0, 0, 1);
+
+            endCam = pWorld
+              .clone()
+              .add(radialDir.clone().multiplyScalar(36))
+              .add(new THREE.Vector3(0, 14, 0));
+          }
         }
+
+        controls.target.lerpVectors(flight.startTargetPos, endTarget, ease);
+        camera.position.lerpVectors(flight.startCamPos, endCam, ease);
+        controls.update();
+
+        if (progress >= 1.0) {
+          flight.isFlying = false;
+          if (flight.targetNode && flight.targetNode.user.id !== 'sun-center') {
+            flight.isTracking = true;
+          }
+        }
+      } else if (flight.isTracking && flight.targetNode) {
+        // Continuous tracking: keep camera locked to the gently revolving planet
+        const pWorld = new THREE.Vector3();
+        flight.targetNode.sprite.getWorldPosition(pWorld);
+
+        const delta = pWorld.clone().sub(controls.target);
+        controls.target.copy(pWorld);
+        camera.position.add(delta);
+        controls.update();
+      } else {
+        controls.update();
       }
 
       // Slow deep-space celestial drift
@@ -823,10 +887,14 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         }
       }
 
-      // Smart Speed: Slow down when hovering for effortless interaction
+      // Smart Speed: Slow down when hovering or focused on a planet for effortless inspection
+      const isFocused =
+        flight.targetNode !== null &&
+        flight.targetNode.user.id !== 'sun-center' &&
+        (flight.isFlying || flight.isTracking);
       const isHovering = hoveredSpriteRef.current !== null;
-      const currentSpeed = isHovering
-        ? BASE_SPEED * 0.05
+      const currentSpeed = isHovering || isFocused
+        ? BASE_SPEED * 0.04
         : isPlaying
         ? BASE_SPEED * speedMultiplier
         : 0;
@@ -1002,32 +1070,58 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   };
 
   const flyToUser = (user: UserNode) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
     const node = planetNodesRef.current.find((n) => n.user.id === user.id);
     if (!node) return;
 
-    const worldPos = new THREE.Vector3();
-    node.sprite.getWorldPosition(worldPos);
-
-    controlsTargetPosRef.current.copy(worldPos);
-    cameraTargetPosRef.current.set(worldPos.x, worldPos.y + 25, worldPos.z + 45);
-    isCinematicMovingRef.current = true;
+    flightStateRef.current = {
+      isFlying: true,
+      isTracking: false,
+      startTime: performance.now(),
+      duration: 1100,
+      startCamPos: camera.position.clone(),
+      startTargetPos: controls.target.clone(),
+      targetNode: node,
+    };
   };
 
   const handleResetCamera = () => {
-    controlsTargetPosRef.current.set(0, 0, 0);
-    cameraTargetPosRef.current.set(0, 180, 250);
-    isCinematicMovingRef.current = true;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    flightStateRef.current = {
+      isFlying: true,
+      isTracking: false,
+      startTime: performance.now(),
+      duration: 1200,
+      startCamPos: camera.position.clone(),
+      startTargetPos: controls.target.clone(),
+      targetNode: null,
+    };
     setSelectedPlanetUser(null);
   };
 
+  const dragStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
+  };
+
   const handleClick = (e: React.MouseEvent) => {
+    const dx = Math.abs(e.clientX - dragStartPos.current.x);
+    const dy = Math.abs(e.clientY - dragStartPos.current.y);
+    if (dx > 5 || dy > 5) return; // User was dragging the orbit camera, not clicking
+
     const sprite = getIntersectedSprite(e.clientX, e.clientY);
     if (sprite) {
       const user = clickableSpritesRef.current.get(sprite);
       if (user) {
         setSelectedPlanetUser(user);
         flyToUser(user);
-        onSelectUser(user);
       }
     }
   };
@@ -1058,6 +1152,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         {/* Three.js Canvas */}
         <div
           ref={mountRef}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onClick={handleClick}
           className="w-full h-full cursor-grab active:cursor-grabbing"
@@ -1303,6 +1398,15 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                     <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
                     <span>访问 X 主页</span>
                   </a>
+
+                  <button
+                    onClick={() => onSelectUser(selectedPlanetUser)}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer"
+                    title="展开完整互动档案明细"
+                  >
+                    <Award className="w-3.5 h-3.5 text-purple-400" />
+                    <span>档案</span>
+                  </button>
 
                   <button
                     onClick={handleResetCamera}
