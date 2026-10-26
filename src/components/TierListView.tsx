@@ -4,9 +4,10 @@ import type { CircleData, UserNode } from '../types';
 
 interface TierListViewProps {
   data: CircleData;
+  onSelectUser?: (user: UserNode) => void;
 }
 
-export const TierListView: React.FC<TierListViewProps> = ({ data }) => {
+export const TierListView: React.FC<TierListViewProps> = ({ data, onSelectUser }) => {
   const tiers: {
     rank: 'S' | 'A' | 'B' | 'C';
     title: string;
@@ -58,7 +59,7 @@ export const TierListView: React.FC<TierListViewProps> = ({ data }) => {
             推特互动好友段位金字塔
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            基于多维度互动加权（回复 ×3、引用 ×2.5、转推 ×1.5、艾特 ×1）综合计算
+            基于多维度互动加权（回复 ×3、引用 ×2.5、转推 ×1.5、艾特 ×1）综合计算 · 点击卡片查看关系画像
           </p>
         </div>
         <div className="text-right">
@@ -96,7 +97,8 @@ export const TierListView: React.FC<TierListViewProps> = ({ data }) => {
               {tier.users.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-indigo-500/40 hover:bg-slate-800/40 transition-all group"
+                  onClick={() => onSelectUser?.(user)}
+                  className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-indigo-500/50 hover:bg-slate-800/60 transition-all group cursor-pointer hover:scale-[1.02]"
                 >
                   {/* Left: Avatar + Names */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -118,14 +120,9 @@ export const TierListView: React.FC<TierListViewProps> = ({ data }) => {
                       <p className="text-xs font-bold text-slate-200 truncate group-hover:text-indigo-300 transition-colors">
                         {user.name}
                       </p>
-                      <a
-                        href={`https://x.com/${user.handle}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-slate-400 hover:text-indigo-400 truncate block"
-                      >
+                      <span className="text-[11px] text-slate-400 truncate block">
                         @{user.handle}
-                      </a>
+                      </span>
                     </div>
                   </div>
 

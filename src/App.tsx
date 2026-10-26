@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { SearchBanner } from './components/SearchBanner';
 import { OrbitView } from './components/OrbitView';
+import { Galaxy3DView } from './components/Galaxy3DView';
 import { TierListView } from './components/TierListView';
 import { InsightsView } from './components/InsightsView';
 import { ControlPanel } from './components/ControlPanel';
 import { ArchiveDropzone } from './components/ArchiveDropzone';
 import { ExportModal } from './components/ExportModal';
+import { UserDetailModal } from './components/UserDetailModal';
 import { DEMO_CIRCLE_DATA } from './core/demoData';
 import { fetchOnlineCircle } from './core/onlineFetcher';
-import type { CircleData, CustomizationSettings } from './types';
+import type { CircleData, CustomizationSettings, UserNode } from './types';
 import { Shield } from 'lucide-react';
 
 export function App() {
@@ -17,6 +19,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserNode | null>(null);
 
   const [settings, setSettings] = useState<CustomizationSettings>({
     theme: 'cosmic',
@@ -73,6 +76,7 @@ export function App() {
 
         {/* View Content based on viewMode */}
         <div className="w-full max-w-6xl mx-auto flex-1">
+          {/* 1. 2D Orbit View */}
           {settings.viewMode === 'orbit' && (
             <div className="space-y-2">
               <OrbitView
@@ -87,8 +91,20 @@ export function App() {
             </div>
           )}
 
-          {settings.viewMode === 'tierlist' && <TierListView data={data} />}
+          {/* 2. 3D Cosmic Galaxy View */}
+          {settings.viewMode === 'galaxy3d' && (
+            <Galaxy3DView
+              data={data}
+              onSelectUser={(user) => setSelectedUser(user)}
+            />
+          )}
 
+          {/* 3. Tier List View */}
+          {settings.viewMode === 'tierlist' && (
+            <TierListView data={data} onSelectUser={(user) => setSelectedUser(user)} />
+          )}
+
+          {/* 4. Social Insights View */}
           {settings.viewMode === 'insights' && <InsightsView data={data} />}
         </div>
       </main>
@@ -137,6 +153,12 @@ export function App() {
         onClose={() => setIsExportModalOpen(false)}
         data={data}
         settings={settings}
+      />
+
+      {/* User Detail Modal */}
+      <UserDetailModal
+        user={selectedUser}
+        onClose={() => setSelectedUser(null)}
       />
     </div>
   );

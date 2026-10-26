@@ -1,5 +1,5 @@
 import React from 'react';
-import { Orbit, Trophy, PieChart, Download } from 'lucide-react';
+import { Orbit, Trophy, PieChart, Download, Sparkles } from 'lucide-react';
 import type { CustomizationSettings } from '../types';
 
 interface NavbarProps {
@@ -49,7 +49,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Orbit className="w-3.5 h-3.5" />
-            <span>宇宙轨道</span>
+            <span>2D 轨道</span>
+          </button>
+
+          <button
+            onClick={() => onUpdateSettings({ viewMode: 'galaxy3d' })}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              settings.viewMode === 'galaxy3d'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>3D 宇宙</span>
           </button>
 
           <button

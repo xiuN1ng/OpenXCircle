@@ -62,6 +62,6 @@ export interface CustomizationSettings {
   ringCount: 2 | 3;
   avatarSize: number; // 32 - 64
   rotationSpeed: number; // 0 (static) - 2 (fast)
-  viewMode: 'orbit' | 'tierlist' | 'insights';
+  viewMode: 'orbit' | 'galaxy3d' | 'tierlist' | 'insights';
   exportScale: 2 | 4; // 2x or 4K
 }
