@@ -55,7 +55,7 @@ export const DEMO_CIRCLE_DATA: CircleData = {
       id: '4',
       name: 'Greg Brockman',
       handle: 'gdb',
-      avatar: 'https://avatars.githubusercontent.com/u/150797?v=4',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
       score: 89,
       rank: 'S',
       ring: 1,

@@ -113,8 +113,8 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     return texture;
   };
 
-  // 3. Procedural Radiant Solar Corona & Flare Texture (NO MUDDY POLYGON RINGS!)
-  const createSolarCoronaTexture = (): THREE.Texture => {
+  // 3. Photorealistic Stellar Optical Bloom Texture (NO cartoon rays, NO spokes)
+  const createStellarBloomTexture = (): THREE.Texture => {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
@@ -123,30 +123,43 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const cx = 128;
     const cy = 128;
 
-    // Smooth Gaussian solar corona falloff
-    const grad = ctx.createRadialGradient(cx, cy, 14, cx, cy, 128);
-    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    grad.addColorStop(0.15, 'rgba(254, 240, 138, 0.95)');
-    grad.addColorStop(0.35, 'rgba(245, 158, 11, 0.6)');
-    grad.addColorStop(0.65, 'rgba(217, 119, 6, 0.2)');
-    grad.addColorStop(0.85, 'rgba(180, 83, 9, 0.04)');
+    // Smooth photographic Gaussian celestial bloom
+    const grad = ctx.createRadialGradient(cx, cy, 18, cx, cy, 120);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    grad.addColorStop(0.2, 'rgba(254, 240, 138, 0.65)');
+    grad.addColorStop(0.48, 'rgba(245, 158, 11, 0.22)');
+    grad.addColorStop(0.75, 'rgba(99, 102, 241, 0.05)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 256);
 
-    // Soft feathered solar ray shafts radiating outward
-    ctx.save();
-    ctx.translate(cx, cy);
-    for (let i = 0; i < 16; i++) {
-      ctx.rotate((Math.PI * 2) / 16);
-      const rayGrad = ctx.createLinearGradient(0, 0, 124, 0);
-      rayGrad.addColorStop(0, 'rgba(254, 240, 138, 0.3)');
-      rayGrad.addColorStop(0.45, 'rgba(245, 158, 11, 0.1)');
-      rayGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = rayGrad;
-      ctx.fillRect(0, -4, 124, 8);
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
+  // 3b. Cinematic Anamorphic Optical Flare Streak (James Webb / Interstellar style)
+  const createAnamorphicStreakTexture = (): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+
+    const cy = 32;
+
+    const gradH = ctx.createLinearGradient(0, cy, 512, cy);
+    gradH.addColorStop(0, 'rgba(186, 230, 253, 0)');
+    gradH.addColorStop(0.35, 'rgba(186, 230, 253, 0.25)');
+    gradH.addColorStop(0.5, 'rgba(255, 255, 255, 0.85)');
+    gradH.addColorStop(0.65, 'rgba(186, 230, 253, 0.25)');
+    gradH.addColorStop(1, 'rgba(186, 230, 253, 0)');
+
+    ctx.fillStyle = gradH;
+    for (let y = 0; y < 14; y++) {
+      const alpha = Math.cos((y / 14) * (Math.PI / 2));
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.fillRect(0, cy - y, 512, 1);
+      ctx.fillRect(0, cy + y, 512, 1);
     }
-    ctx.restore();
 
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
@@ -490,49 +503,39 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     planetNodesRef.current = [];
     clickableSpritesRef.current.clear();
 
-    // 9. Central Sun: Radiant Solar Flare Halo (COMPLETELY REMOVED MUDDY FLAT RINGS!)
+    // 9. Central Sun: Cinematic Photorealistic Stellar Atmosphere
     const sunGroup = new THREE.Group();
     scene.add(sunGroup);
 
-    // 9a. Soft Additive Sunburst Corona Billboard Sprite
-    const sunCoronaTexture = createSolarCoronaTexture();
-    const sunCoronaMat = new THREE.SpriteMaterial({
-      map: sunCoronaTexture,
+    // 9a. Soft Optical Gaussian Stellar Bloom (Hugs the sun avatar naturally, scale 58)
+    const sunBloomTex = createStellarBloomTexture();
+    const sunBloomMat = new THREE.SpriteMaterial({
+      map: sunBloomTex,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    const sunCoronaSprite = new THREE.Sprite(sunCoronaMat);
-    const sunCoronaBaseScale = 115;
-    sunCoronaSprite.scale.set(sunCoronaBaseScale, sunCoronaBaseScale, 1);
-    sunCoronaSprite.position.set(0, 0, 0);
-    sunCoronaSprite.renderOrder = 5;
-    sunGroup.add(sunCoronaSprite);
+    const sunBloomSprite = new THREE.Sprite(sunBloomMat);
+    const sunBloomBaseScale = 58;
+    sunBloomSprite.scale.set(sunBloomBaseScale, sunBloomBaseScale, 1);
+    sunBloomSprite.position.set(0, 0, 0);
+    sunBloomSprite.renderOrder = 10;
+    sunGroup.add(sunBloomSprite);
 
-    // 9b. Swirling Solar Flare Dust Particles (120 particles dancing around core star)
-    const flareDustCount = 120;
-    const flareDustGeo = new THREE.BufferGeometry();
-    const flareDustPos = new Float32Array(flareDustCount * 3);
-    for (let f = 0; f < flareDustCount; f++) {
-      const fDist = 24 + Math.random() * 26;
-      const fAngle = Math.random() * Math.PI * 2;
-      const fY = (Math.random() - 0.5) * 12;
-      flareDustPos[f * 3] = Math.cos(fAngle) * fDist;
-      flareDustPos[f * 3 + 1] = fY;
-      flareDustPos[f * 3 + 2] = Math.sin(fAngle) * fDist;
-    }
-    flareDustGeo.setAttribute('position', new THREE.BufferAttribute(flareDustPos, 3));
-    const flareDustMat = new THREE.PointsMaterial({
-      size: 3.2,
-      map: starTexture,
-      color: 0xfbbf24,
+    // 9b. Cinematic Anamorphic Horizontal Optical Flare (NASA / Sci-Fi movie style)
+    const sunStreakTex = createAnamorphicStreakTexture();
+    const sunStreakMat = new THREE.SpriteMaterial({
+      map: sunStreakTex,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.38,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    const flareDustPoints = new THREE.Points(flareDustGeo, flareDustMat);
-    sunGroup.add(flareDustPoints);
+    const sunStreakSprite = new THREE.Sprite(sunStreakMat);
+    sunStreakSprite.scale.set(160, 5, 1);
+    sunStreakSprite.position.set(0, 0, 0);
+    sunStreakSprite.renderOrder = 11;
+    sunGroup.add(sunStreakSprite);
 
     // 9c. Central Avatar Billboard Sprite (Target User)
     const targetUserNode: UserNode = {
@@ -577,7 +580,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     planetNodesRef.current.push({
       group: sunGroup,
       sprite: sunSprite,
-      beaconSprite: sunCoronaSprite,
+      beaconSprite: sunBloomSprite,
       user: targetUserNode,
       baseScale: sunScale,
     });
@@ -738,11 +741,10 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       starField.rotation.y += 0.00008;
       nebulaField.rotation.y -= 0.00012;
 
-      // Solar Corona subtle breathing & soft rotation
-      sunCoronaSprite.material.rotation += 0.0008;
-      const coronaScale = sunCoronaBaseScale * (1.0 + Math.sin(clock * 1.3) * 0.035);
-      sunCoronaSprite.scale.set(coronaScale, coronaScale, 1);
-      flareDustPoints.rotation.y += 0.0015;
+      // Solar Bloom & Anamorphic Flare gentle breathing
+      const bloomScale = sunBloomBaseScale * (1.0 + Math.sin(clock * 1.5) * 0.025);
+      sunBloomSprite.scale.set(bloomScale, bloomScale, 1);
+      sunStreakSprite.material.opacity = 0.35 + Math.sin(clock * 2.0) * 0.05;
 
       // Shooting Star Animation
       nextShootingStarTime--;
@@ -797,7 +799,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         const targetScale = isTarget ? node.baseScale * 1.25 : node.baseScale;
         node.sprite.scale.lerp(new THREE.Vector3(targetScale, targetScale, 1), 0.18);
 
-        if (node.beaconSprite && node.beaconSprite !== sunCoronaSprite) {
+        if (node.beaconSprite && node.beaconSprite !== sunBloomSprite) {
           const targetBeaconScale = isTarget ? 10 : 6;
           const targetBeaconOpacity = isTarget ? 0.8 : 0.35;
           node.beaconSprite.scale.lerp(new THREE.Vector3(targetBeaconScale, targetBeaconScale, 1), 0.15);
