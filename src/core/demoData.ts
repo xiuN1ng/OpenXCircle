@@ -4,7 +4,7 @@ export const DEMO_CIRCLE_DATA: CircleData = {
   targetUser: {
     name: 'ColdMountain Lab',
     handle: 'coldmountainlab',
-    avatar: 'https://avatars.githubusercontent.com/u/10007?v=4',
+    avatar: 'https://avatars.githubusercontent.com/u/810438?v=4',
     bio: '专注独立开发、AI 增长实验与开源工具探索',
   },
   stats: {
@@ -141,7 +141,7 @@ export const DEMO_CIRCLE_DATA: CircleData = {
       id: '11',
       name: 'Nat Friedman',
       handle: 'natfriedman',
-      avatar: 'https://avatars.githubusercontent.com/u/10007?v=4',
+      avatar: 'https://avatars.githubusercontent.com/u/810438?v=4',
       score: 69,
       rank: 'A',
       ring: 2,

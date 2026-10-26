@@ -27,10 +27,9 @@ interface Galaxy3DViewProps {
 interface PlanetNodeRef {
   group: THREE.Group;
   sprite: THREE.Sprite;
+  beaconSprite: THREE.Sprite;
   user: UserNode;
   baseScale: number;
-  radius: number;
-  initialAngle: number;
 }
 
 export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }) => {
@@ -66,25 +65,24 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const clickableSpritesRef = useRef<Map<THREE.Sprite, UserNode>>(new Map());
   const hoveredSpriteRef = useRef<THREE.Sprite | null>(null);
 
-  // Procedural Star Texture Generator for Real Optical Blooming Stars
+  // 1. Procedural Star Texture Generator for Real Optical Blooming Stars
   const createStarTexture = (): THREE.Texture => {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
     const ctx = canvas.getContext('2d')!;
 
-    // Radial Gaussian falloff
     const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
     grad.addColorStop(0.12, 'rgba(255, 255, 255, 0.95)');
     grad.addColorStop(0.35, 'rgba(186, 230, 253, 0.55)');
-    grad.addColorStop(0.65, 'rgba(99, 102, 241, 0.18)');
+    grad.addColorStop(0.65, 'rgba(99, 102, 241, 0.15)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 64, 64);
 
     // Subtle 4-point optical diffraction starburst flare
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(32, 6); ctx.lineTo(32, 58);
@@ -95,7 +93,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     return texture;
   };
 
-  // Procedural Volumetric Nebula Cloud Texture
+  // 2. Procedural Volumetric Nebula Cloud Texture
   const createNebulaTexture = (): THREE.Texture => {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -115,7 +113,65 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     return texture;
   };
 
-  // High-definition 512x512 billboard canvas texture generator
+  // 3. Procedural Radiant Solar Corona & Flare Texture (NO MUDDY POLYGON RINGS!)
+  const createSolarCoronaTexture = (): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+
+    const cx = 128;
+    const cy = 128;
+
+    // Smooth Gaussian solar corona falloff
+    const grad = ctx.createRadialGradient(cx, cy, 14, cx, cy, 128);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grad.addColorStop(0.15, 'rgba(254, 240, 138, 0.95)');
+    grad.addColorStop(0.35, 'rgba(245, 158, 11, 0.6)');
+    grad.addColorStop(0.65, 'rgba(217, 119, 6, 0.2)');
+    grad.addColorStop(0.85, 'rgba(180, 83, 9, 0.04)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Soft feathered solar ray shafts radiating outward
+    ctx.save();
+    ctx.translate(cx, cy);
+    for (let i = 0; i < 16; i++) {
+      ctx.rotate((Math.PI * 2) / 16);
+      const rayGrad = ctx.createLinearGradient(0, 0, 124, 0);
+      rayGrad.addColorStop(0, 'rgba(254, 240, 138, 0.3)');
+      rayGrad.addColorStop(0.45, 'rgba(245, 158, 11, 0.1)');
+      rayGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = rayGrad;
+      ctx.fillRect(0, -4, 124, 8);
+    }
+    ctx.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
+  // 4. Soft Optical Beacon Flare Texture for Planet Base
+  const createBeaconTexture = (color: string): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    grad.addColorStop(0.25, color);
+    grad.addColorStop(0.65, color.replace(/[\d\.]+\)$/, '0.15)'));
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  };
+
+  // 5. High-definition 512x512 billboard canvas texture generator
   const createPlanetSpriteTexture = (
     avatarUrl: string,
     name: string,
@@ -152,7 +208,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       const cy = 224;
       const r = 168;
 
-      // 1. Soft Cosmic Atmosphere Glow
+      // Soft Cosmic Atmosphere Glow
       const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.38);
       glowGrad.addColorStop(0, glowColor);
       glowGrad.addColorStop(0.7, glowColor.replace(/[\d\.]+\)$/, '0.2)'));
@@ -162,13 +218,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       ctx.arc(cx, cy, r * 1.38, 0, Math.PI * 2);
       ctx.fill();
 
-      // 2. Base Dark Cosmic Disc Backing
+      // Base Dark Cosmic Disc Backing
       ctx.fillStyle = '#060a14';
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // 3. Avatar Photo or Stylized Initial Fallback
+      // Avatar Photo or Stylized Initial Fallback
       if (loadedImg && loadedImg.complete && loadedImg.naturalWidth > 0) {
         ctx.save();
         ctx.beginPath();
@@ -193,21 +249,21 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         ctx.fillText(initial, cx, cy);
       }
 
-      // 4. Luminous Border Ring
+      // Luminous Border Ring
       ctx.strokeStyle = borderColor;
       ctx.lineWidth = rank === 'SUN' ? 14 : 9;
       ctx.beginPath();
       ctx.arc(cx, cy, r - 4, 0, Math.PI * 2);
       ctx.stroke();
 
-      // 5. Specular Arc Highlight
+      // Specular Arc Highlight
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(cx, cy, r - 5, -Math.PI * 0.78, -Math.PI * 0.15);
       ctx.stroke();
 
-      // 6. Handle Pill at Bottom
+      // Handle Pill at Bottom
       const cleanHandle = handle.length > 12 ? handle.substring(0, 11) + '…' : handle;
       ctx.font = '600 30px system-ui, -apple-system, sans-serif';
       const textWidth = ctx.measureText(`@${cleanHandle}`).width;
@@ -229,7 +285,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       ctx.textBaseline = 'middle';
       ctx.fillText(`@${cleanHandle}`, cx, pillY + pillHeight / 2 + 1);
 
-      // 7. Rank Badge Emblem (Top right)
+      // Rank Badge Emblem (Top right)
       const badgeR = 34;
       const badgeX = cx + r * 0.72;
       const badgeY = cy - r * 0.72;
@@ -278,13 +334,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     sceneRef.current = scene;
     scene.fog = new THREE.FogExp2(0x020308, 0.0005);
 
-    // 2. Perspective Camera (Comfortable 3D isometric overview)
+    // 2. Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 4000);
     camera.position.set(0, 180, 250);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // 3. WebGL Renderer with High-Precision Tone Mapping
+    // 3. WebGL Renderer
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -337,13 +393,13 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
       const dice = Math.random();
       if (dice > 0.75) {
-        starCols[i * 3] = 0.55; starCols[i * 3 + 1] = 0.85; starCols[i * 3 + 2] = 1.0; // Sirius Blue
+        starCols[i * 3] = 0.55; starCols[i * 3 + 1] = 0.85; starCols[i * 3 + 2] = 1.0;
       } else if (dice > 0.5) {
-        starCols[i * 3] = 0.9; starCols[i * 3 + 1] = 0.6; starCols[i * 3 + 2] = 1.0; // Nebula Violet
+        starCols[i * 3] = 0.9; starCols[i * 3 + 1] = 0.6; starCols[i * 3 + 2] = 1.0;
       } else if (dice > 0.3) {
-        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 0.88; starCols[i * 3 + 2] = 0.45; // Betelgeuse Gold
+        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 0.88; starCols[i * 3 + 2] = 0.45;
       } else {
-        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 1.0; starCols[i * 3 + 2] = 1.0; // Vega White
+        starCols[i * 3] = 1.0; starCols[i * 3 + 1] = 1.0; starCols[i * 3 + 2] = 1.0;
       }
     }
 
@@ -372,7 +428,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     for (let i = 0; i < nebulaCount; i++) {
       const dist = 60 + Math.random() * 380;
       const ang = Math.random() * Math.PI * 2;
-      // Tilted plane equation
       const x = Math.cos(ang) * dist;
       const z = Math.sin(ang) * dist;
       const y = x * 0.22 + (Math.random() - 0.5) * 45;
@@ -383,9 +438,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
       const cMix = Math.random();
       if (cMix > 0.5) {
-        nebCols[i * 3] = 0.45; nebCols[i * 3 + 1] = 0.25; nebCols[i * 3 + 2] = 0.95; // Indigo dust
+        nebCols[i * 3] = 0.45; nebCols[i * 3 + 1] = 0.25; nebCols[i * 3 + 2] = 0.95;
       } else {
-        nebCols[i * 3] = 0.15; nebCols[i * 3 + 1] = 0.65; nebCols[i * 3 + 2] = 0.85; // Cyan dust
+        nebCols[i * 3] = 0.15; nebCols[i * 3 + 1] = 0.65; nebCols[i * 3 + 2] = 0.85;
       }
     }
 
@@ -403,9 +458,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     const nebulaField = new THREE.Points(nebulaGeo, nebulaMat);
     scene.add(nebulaField);
 
-    // 8. Cosmic Shooting Star System (流星系统)
+    // 8. Cosmic Shooting Star System
     const shootingStarGeo = new THREE.BufferGeometry();
-    const shootingStarPoints = new Float32Array(6); // 2 vertices
+    const shootingStarPoints = new Float32Array(6);
     shootingStarGeo.setAttribute('position', new THREE.BufferAttribute(shootingStarPoints, 3));
     const shootingStarMat = new THREE.LineBasicMaterial({
       color: 0xffffff,
@@ -435,36 +490,51 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     planetNodesRef.current = [];
     clickableSpritesRef.current.clear();
 
-    // 9. Central Sun (Target User Core Star)
+    // 9. Central Sun: Radiant Solar Flare Halo (COMPLETELY REMOVED MUDDY FLAT RINGS!)
     const sunGroup = new THREE.Group();
     scene.add(sunGroup);
 
-    // Dynamic Solar Corona Rings
-    const coronaGeo1 = new THREE.RingGeometry(24, 34, 48);
-    const coronaMat1 = new THREE.MeshBasicMaterial({
+    // 9a. Soft Additive Sunburst Corona Billboard Sprite
+    const sunCoronaTexture = createSolarCoronaTexture();
+    const sunCoronaMat = new THREE.SpriteMaterial({
+      map: sunCoronaTexture,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sunCoronaSprite = new THREE.Sprite(sunCoronaMat);
+    const sunCoronaBaseScale = 115;
+    sunCoronaSprite.scale.set(sunCoronaBaseScale, sunCoronaBaseScale, 1);
+    sunCoronaSprite.position.set(0, 0, 0);
+    sunCoronaSprite.renderOrder = 5;
+    sunGroup.add(sunCoronaSprite);
+
+    // 9b. Swirling Solar Flare Dust Particles (120 particles dancing around core star)
+    const flareDustCount = 120;
+    const flareDustGeo = new THREE.BufferGeometry();
+    const flareDustPos = new Float32Array(flareDustCount * 3);
+    for (let f = 0; f < flareDustCount; f++) {
+      const fDist = 24 + Math.random() * 26;
+      const fAngle = Math.random() * Math.PI * 2;
+      const fY = (Math.random() - 0.5) * 12;
+      flareDustPos[f * 3] = Math.cos(fAngle) * fDist;
+      flareDustPos[f * 3 + 1] = fY;
+      flareDustPos[f * 3 + 2] = Math.sin(fAngle) * fDist;
+    }
+    flareDustGeo.setAttribute('position', new THREE.BufferAttribute(flareDustPos, 3));
+    const flareDustMat = new THREE.PointsMaterial({
+      size: 3.2,
+      map: starTexture,
       color: 0xfbbf24,
       transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
-    const corona1 = new THREE.Mesh(coronaGeo1, coronaMat1);
-    corona1.rotation.x = Math.PI / 2;
-    sunGroup.add(corona1);
+    const flareDustPoints = new THREE.Points(flareDustGeo, flareDustMat);
+    sunGroup.add(flareDustPoints);
 
-    const coronaGeo2 = new THREE.RingGeometry(30, 44, 48);
-    const coronaMat2 = new THREE.MeshBasicMaterial({
-      color: 0x818cf8,
-      transparent: true,
-      opacity: 0.35,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-    });
-    const corona2 = new THREE.Mesh(coronaGeo2, coronaMat2);
-    corona2.rotation.x = Math.PI / 2 + 0.18;
-    sunGroup.add(corona2);
-
-    // Target User Avatar Billboard Sprite
+    // 9c. Central Avatar Billboard Sprite (Target User)
     const targetUserNode: UserNode = {
       id: 'sun-center',
       name: data.targetUser.name,
@@ -507,16 +577,23 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     planetNodesRef.current.push({
       group: sunGroup,
       sprite: sunSprite,
+      beaconSprite: sunCoronaSprite,
       user: targetUserNode,
       baseScale: sunScale,
-      radius: 0,
-      initialAngle: 0,
     });
 
-    // 10. Planetary Systems & Luminous Orbit Stardust Streams
+    // 10. Planetary Systems & Luminous Orbit Stardust Accretion Streams
+    // Radii of concentric orbits
     const orbitRadii = [82, 148, 218];
     const ringUsers = [data.innerRing, data.middleRing, data.outerRing];
-    const ringColors = [0xf59e0b, 0xa855f7, 0x06b6d4];
+
+    // Refined celestial starlight color palette (NO harsh primary colors!)
+    const stardustColors = [0xfef08a, 0xddd6fe, 0xbae6fd];
+    const beaconRgba = [
+      'rgba(254, 240, 138, 0.85)',
+      'rgba(221, 214, 254, 0.75)',
+      'rgba(186, 230, 253, 0.65)',
+    ];
 
     const innerGroup = new THREE.Group();
     const middleGroup = new THREE.Group();
@@ -532,54 +609,49 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
     const orbitGroups = [innerGroup, middleGroup, outerGroup];
 
-    // Array to track orbital flowing stardust particles
-    const orbitParticlesList: { points: THREE.Points; radius: number; speed: number }[] = [];
-
     orbitRadii.forEach((radius, ringIdx) => {
       const parentGroup = orbitGroups[ringIdx];
 
-      // 10a. 3D Glowing Orbit Line Loop
+      // 10a. Ethereal Sub-surface Gravitational Track (Deep slate, ultra-low opacity 0.12 - NO harsh wires!)
       const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
       const points = curve.getPoints(120);
       const orbitGeo = new THREE.BufferGeometry().setFromPoints(
         points.map((p) => new THREE.Vector3(p.x, 0, p.y))
       );
       const orbitMat = new THREE.LineBasicMaterial({
-        color: ringColors[ringIdx],
+        color: 0x475569, // celestial slate
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.14,
         blending: THREE.AdditiveBlending,
       });
       const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
       scene.add(orbitLine);
 
-      // 10b. Living Orbital Stardust Stream (Flowing particles along orbit)
-      const particleCount = 80;
+      // 10b. Living Accretion Stardust Stream (180 particles with natural radial dispersion)
+      const particleCount = 180;
       const partGeo = new THREE.BufferGeometry();
       const partPos = new Float32Array(particleCount * 3);
       for (let p = 0; p < particleCount; p++) {
         const pAngle = (p / particleCount) * Math.PI * 2;
-        partPos[p * 3] = Math.cos(pAngle) * radius;
-        partPos[p * 3 + 1] = 0;
-        partPos[p * 3 + 2] = Math.sin(pAngle) * radius;
+        // Subtle radial jitter creates a natural celestial dust ribbon
+        const rJitter = radius + (Math.random() - 0.5) * 2.2;
+        const yJitter = (Math.random() - 0.5) * 1.5;
+        partPos[p * 3] = Math.cos(pAngle) * rJitter;
+        partPos[p * 3 + 1] = yJitter;
+        partPos[p * 3 + 2] = Math.sin(pAngle) * rJitter;
       }
       partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
       const partMat = new THREE.PointsMaterial({
-        size: 3.5,
+        size: ringIdx === 0 ? 3.0 : ringIdx === 1 ? 2.6 : 2.2,
         map: starTexture,
-        color: ringColors[ringIdx],
+        color: stardustColors[ringIdx],
         transparent: true,
-        opacity: 0.6,
+        opacity: ringIdx === 0 ? 0.45 : ringIdx === 1 ? 0.38 : 0.3,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
       const orbitPoints = new THREE.Points(partGeo, partMat);
       parentGroup.add(orbitPoints);
-      orbitParticlesList.push({
-        points: orbitPoints,
-        radius,
-        speed: ringIdx === 0 ? 0.0006 : ringIdx === 1 ? 0.0004 : 0.00025,
-      });
 
       // 10c. Orbiting Planets
       const users = ringUsers[ringIdx] || [];
@@ -588,6 +660,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
 
       const angleStep = (Math.PI * 2) / count;
       const spriteScale = ringIdx === 0 ? 25 : ringIdx === 1 ? 20 : 16;
+      const beaconTex = createBeaconTexture(beaconRgba[ringIdx]);
 
       users.forEach((user, idx) => {
         const angle = idx * angleStep;
@@ -598,34 +671,21 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         planetSystem.position.set(x, 0, z);
         parentGroup.add(planetSystem);
 
-        // Grounding Beacon Ring on orbit plane (y = 0)
-        const beaconGeo = new THREE.RingGeometry(2.5, 4.2, 24);
-        const beaconMat = new THREE.MeshBasicMaterial({
-          color: ringColors[ringIdx],
+        // Soft Optical Gravitational Beacon Flare on orbit plane (y = 0)
+        // (REPLACED UGLY WASHER MESHES AND VERTICAL STICKS!)
+        const beaconMat = new THREE.SpriteMaterial({
+          map: beaconTex,
           transparent: true,
-          opacity: 0.55,
-          side: THREE.DoubleSide,
+          opacity: 0.35,
           blending: THREE.AdditiveBlending,
+          depthWrite: false,
         });
-        const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
-        beaconMesh.rotation.x = Math.PI / 2;
-        planetSystem.add(beaconMesh);
+        const beaconSprite = new THREE.Sprite(beaconMat);
+        beaconSprite.scale.set(6, 6, 1);
+        beaconSprite.position.set(0, 0, 0);
+        planetSystem.add(beaconSprite);
 
-        // Vertical Gravity Tether Light Beam
-        const beamGeo = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(0, 5, 0),
-        ]);
-        const beamMat = new THREE.LineBasicMaterial({
-          color: ringColors[ringIdx],
-          transparent: true,
-          opacity: 0.4,
-          blending: THREE.AdditiveBlending,
-        });
-        const beamLine = new THREE.Line(beamGeo, beamMat);
-        planetSystem.add(beamLine);
-
-        // Avatar Billboard Sprite (Elevated at y = 5, 100% Unobstructed)
+        // Avatar Billboard Sprite (Elevated naturally at y = 3.5 in zero gravity)
         const texture = createPlanetSpriteTexture(user.avatar, user.name, user.handle, user.rank);
         const spriteMat = new THREE.SpriteMaterial({
           map: texture,
@@ -635,7 +695,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         });
         const sprite = new THREE.Sprite(spriteMat);
         sprite.scale.set(spriteScale, spriteScale, 1);
-        sprite.position.set(0, 5, 0);
+        sprite.position.set(0, 3.5, 0);
         sprite.renderOrder = 100;
         planetSystem.add(sprite);
 
@@ -643,18 +703,17 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         planetNodesRef.current.push({
           group: planetSystem,
           sprite,
+          beaconSprite,
           user,
           baseScale: spriteScale,
-          radius,
-          initialAngle: angle,
         });
       });
     });
 
-    // 11. Animation Loop with Breathing Simulation & Cinematic LERP
+    // 11. 60 FPS Animation Loop
     const BASE_SPEED = 0.0006;
     let clock = 0;
-    let nextShootingStarTime = 120; // in frames
+    let nextShootingStarTime = 120;
 
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate);
@@ -679,17 +738,17 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       starField.rotation.y += 0.00008;
       nebulaField.rotation.y -= 0.00012;
 
-      // Solar Corona pulsation & rotation
-      corona1.rotation.z += 0.003;
-      corona2.rotation.z -= 0.0022;
-      const coronaScale = 1.0 + Math.sin(clock * 1.5) * 0.04;
-      corona1.scale.set(coronaScale, coronaScale, 1);
+      // Solar Corona subtle breathing & soft rotation
+      sunCoronaSprite.material.rotation += 0.0008;
+      const coronaScale = sunCoronaBaseScale * (1.0 + Math.sin(clock * 1.3) * 0.035);
+      sunCoronaSprite.scale.set(coronaScale, coronaScale, 1);
+      flareDustPoints.rotation.y += 0.0015;
 
       // Shooting Star Animation
       nextShootingStarTime--;
       if (nextShootingStarTime <= 0 && !shootingStarActive) {
         triggerShootingStar();
-        nextShootingStarTime = 180 + Math.floor(Math.random() * 240); // 3-7s
+        nextShootingStarTime = 180 + Math.floor(Math.random() * 240);
       }
 
       if (shootingStarActive) {
@@ -732,11 +791,22 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         if (outerGroup) outerGroup.rotation.y += currentSpeed * 0.42;
       }
 
-      // Smooth Hover Scale Spring Animation
+      // Smooth Hover Scale Spring Animation & Beacon highlight
       planetNodesRef.current.forEach((node) => {
         const isTarget = hoveredSpriteRef.current === node.sprite;
         const targetScale = isTarget ? node.baseScale * 1.25 : node.baseScale;
         node.sprite.scale.lerp(new THREE.Vector3(targetScale, targetScale, 1), 0.18);
+
+        if (node.beaconSprite && node.beaconSprite !== sunCoronaSprite) {
+          const targetBeaconScale = isTarget ? 10 : 6;
+          const targetBeaconOpacity = isTarget ? 0.8 : 0.35;
+          node.beaconSprite.scale.lerp(new THREE.Vector3(targetBeaconScale, targetBeaconScale, 1), 0.15);
+          node.beaconSprite.material.opacity = THREE.MathUtils.lerp(
+            node.beaconSprite.material.opacity,
+            targetBeaconOpacity,
+            0.15
+          );
+        }
       });
 
       renderer.render(scene, camera);
@@ -806,7 +876,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     }
   };
 
-  // Fly Camera smoothly to target planet
   const flyToUser = (user: UserNode) => {
     const node = planetNodesRef.current.find((n) => n.user.id === user.id);
     if (!node) return;
@@ -819,7 +888,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     isCinematicMovingRef.current = true;
   };
 
-  // Reset Camera to Galaxy Overview
   const handleResetCamera = () => {
     controlsTargetPosRef.current.set(0, 0, 0);
     cameraTargetPosRef.current.set(0, 180, 250);
@@ -827,7 +895,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     setSelectedPlanetUser(null);
   };
 
-  // Click handler
   const handleClick = (e: React.MouseEvent) => {
     const sprite = getIntersectedSprite(e.clientX, e.clientY);
     if (sprite) {
@@ -840,7 +907,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
     }
   };
 
-  // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
@@ -859,7 +925,6 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         isFullscreen ? 'fixed inset-0 z-50 p-0 bg-slate-950' : 'max-w-7xl p-2 sm:p-4'
       }`}
     >
-      {/* 3D Viewport Frame */}
       <div
         className={`relative w-full rounded-3xl overflow-hidden shadow-2xl shadow-indigo-950/80 border border-slate-800/80 bg-slate-950 group ${
           isFullscreen ? 'h-screen rounded-none border-none' : 'h-[620px] sm:h-[740px]'
@@ -873,7 +938,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           className="w-full h-full cursor-grab active:cursor-grabbing"
         />
 
-        {/* 1. Top Minimalist Command HUD: Concise High-Efficiency Galaxy Status */}
+        {/* 1. Top Minimalist Command HUD */}
         <div className="absolute top-4 left-4 flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl px-4 py-2 rounded-2xl border border-slate-800/90 shadow-2xl pointer-events-none">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
@@ -912,7 +977,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           <span>拖拽 360° 运镜 · 滚轮缩放 · 点击星球聚焦</span>
         </div>
 
-        {/* 3. Floating Hover Tooltip (Quick preview on hover) */}
+        {/* 3. Floating Hover Tooltip */}
         {hoveredUser && !selectedPlanetUser && (
           <div
             className="absolute z-20 pointer-events-none transition-transform duration-75 ease-out"
@@ -946,7 +1011,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           </div>
         )}
 
-        {/* 4. Slide-out Cosmic Telemetry HUD Card (Concise, high-efficiency planet details without blocking universe!) */}
+        {/* 4. Slide-out Cosmic Telemetry HUD Card */}
         {selectedPlanetUser && (
           <div className="absolute top-4 bottom-20 right-4 z-30 w-full max-w-[320px] sm:max-w-[340px] animate-slide-left pointer-events-auto">
             <div className="h-full bg-slate-900/90 backdrop-blur-2xl border border-indigo-500/40 rounded-3xl p-5 shadow-2xl shadow-indigo-950/90 flex flex-col justify-between overflow-y-auto">
@@ -1008,7 +1073,7 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
                   </div>
                 </div>
 
-                {/* Concise High-Efficiency Metrics Grid (2x2) */}
+                {/* Concise High-Efficiency Metrics Grid */}
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <div className="bg-slate-950/70 border border-slate-800/80 p-2.5 rounded-xl">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
@@ -1105,15 +1170,15 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
         {/* 5. Minimalist Orbit Legend (Bottom Left) */}
         <div className="absolute bottom-4 left-4 hidden sm:flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl px-3.5 py-2 rounded-2xl border border-slate-800/90 shadow-2xl pointer-events-none text-xs text-slate-400">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-300 shadow-sm shadow-amber-300/50" />
             <span className="text-slate-300">核心星系 (S)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-sm shadow-purple-400/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-300 shadow-sm shadow-purple-300/50" />
             <span className="text-slate-300">中层轨道 (A)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-300 shadow-sm shadow-cyan-300/50" />
             <span className="text-slate-300">外层星云 (B)</span>
           </div>
         </div>
