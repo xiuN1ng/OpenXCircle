@@ -16,6 +16,15 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ data }) => {
   const fanPercent = Math.round((fanCount / totalUsers) * 100);
   const admirePercent = Math.max(0, 100 - mutualPercent - fanPercent);
 
+  const interactionTotal = data.allUsers.reduce((sum, user) => sum + user.interactions.total, 0);
+  const innerTotal = data.innerRing.reduce((sum, user) => sum + user.interactions.total, 0);
+  const innerShare = interactionTotal > 0 ? Math.round((innerTotal / interactionTotal) * 100) : 0;
+  const interactionLabels = {
+    replies: '评论与回复',
+    quotes: '引用',
+    retweets: '转推',
+  } as const;
+
   // Aggregate badge frequencies
   const badgeMap = new Map<string, number>();
   data.allUsers.forEach((u) => {
@@ -38,9 +47,11 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ data }) => {
             <span className="text-xs font-semibold">互撩指数 (双向奔赴)</span>
             <HeartHandshake className="w-4 h-4" />
           </div>
-          <p className="text-3xl font-black text-white">{data.stats.mutualRatio}%</p>
+          <p className="text-3xl font-black text-white">{mutualPercent}%</p>
           <p className="text-xs text-slate-400 mt-2">
-            圈内共有 <span className="text-indigo-300 font-bold">{mutualCount}</span> 位推友与你高频双向对话
+            {data.source === 'archive'
+              ? '归档只有你发出的推文，看不出对方有没有回复你'
+              : <>圈内共有 <span className="text-indigo-300 font-bold">{mutualCount}</span> 位推友与你双向互动</>}
           </p>
         </div>
 
@@ -52,7 +63,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ data }) => {
           </div>
           <p className="text-3xl font-black text-white">{data.stats.totalInteractions}</p>
           <p className="text-xs text-slate-400 mt-2">
-            以 <span className="text-purple-300 font-bold">评论与回复</span> 为主要交流形式
+            以 <span className="text-purple-300 font-bold">{interactionLabels[data.stats.topInteractionType]}</span> 为主要交流形式
           </p>
         </div>
 
@@ -64,7 +75,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ data }) => {
           </div>
           <p className="text-3xl font-black text-white">{data.innerRing.length} <span className="text-sm font-normal text-slate-400">位</span></p>
           <p className="text-xs text-slate-400 mt-2">
-            占据了你推特总互动量的 <span className="text-rose-300 font-bold">64%</span>
+            占据了你推特总互动量的 <span className="text-rose-300 font-bold">{innerShare}%</span>
           </p>
         </div>
       </div>

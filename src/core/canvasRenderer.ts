@@ -10,10 +10,12 @@ interface Star {
   size: number;
   alpha: number;
 }
-let cachedStars: Star[] = [];
+let cachedStars: { width: number; height: number; stars: Star[] } | null = null;
 
 function getStars(width: number, height: number): Star[] {
-  if (cachedStars.length === 80) return cachedStars;
+  if (cachedStars && cachedStars.width === width && cachedStars.height === height) {
+    return cachedStars.stars;
+  }
   const stars: Star[] = [];
   for (let i = 0; i < 80; i++) {
     stars.push({
@@ -23,7 +25,7 @@ function getStars(width: number, height: number): Star[] {
       alpha: ((i % 5) + 3) * 0.08,
     });
   }
-  cachedStars = stars;
+  cachedStars = { width, height, stars };
   return stars;
 }
 

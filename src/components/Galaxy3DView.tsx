@@ -49,16 +49,37 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isEncounterModalOpen, setIsEncounterModalOpen] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const isPlayingRef = useRef(isPlaying);
+  const speedMultiplierRef = useRef(speedMultiplier);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    speedMultiplierRef.current = speedMultiplier;
+  }, [speedMultiplier]);
+
+  useEffect(() => {
+    return () => {
+      void audioCtxRef.current?.close();
+      audioCtxRef.current = null;
+    };
+  }, []);
 
   // Ethereal pentatonic celestial chime synthesizer (Web Audio API, 0 asset overhead)
   const playCelestialChime = useCallback(
     (type: 'hover' | 'focus' | 'encounter') => {
       if (!isAudioEnabled) return;
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        if (ctx.state === 'suspended') ctx.resume();
+        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+          audioCtxRef.current = new AudioCtx();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') void ctx.resume();
 
         // Pentatonic healing chimes: D5/A5 for hover, G4/C5/E5/G5 for focus, C5/E5/G5/C6 for encounter
         const notes =
@@ -84,7 +105,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
           osc.start(ctx.currentTime + idx * 0.08);
           osc.stop(ctx.currentTime + idx * 0.08 + 1.3);
         });
-      } catch (e) {}
+        } catch {
+          // Autoplay policies and missing audio devices are non-fatal.
+        }
     },
     [isAudioEnabled]
   );
@@ -1349,8 +1372,8 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       const isHovering = hoveredSpriteRef.current !== null;
       const currentSpeed = isHovering || isFocused
         ? BASE_SPEED * 0.04
-        : isPlaying
-        ? BASE_SPEED * speedMultiplier
+        : isPlayingRef.current
+        ? BASE_SPEED * speedMultiplierRef.current
         : 0;
 
       if (currentSpeed > 0) {
@@ -1479,9 +1502,43 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
       if (renderer.domElement && mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
       }
+
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
+      scene.traverse((obj) => {
+        const drawable = obj as THREE.Mesh;
+        if (drawable.geometry && !geometries.has(drawable.geometry)) {
+          geometries.add(drawable.geometry);
+          drawable.geometry.dispose();
+        }
+        if (!drawable.material) return;
+        const mats = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
+        for (const mat of mats) {
+          if (materials.has(mat)) continue;
+          materials.add(mat);
+          const mapped = mat as THREE.Material & {
+            map?: THREE.Texture | null;
+            alphaMap?: THREE.Texture | null;
+            aoMap?: THREE.Texture | null;
+            bumpMap?: THREE.Texture | null;
+            normalMap?: THREE.Texture | null;
+            emissiveMap?: THREE.Texture | null;
+          };
+          for (const key of ['map', 'alphaMap', 'aoMap', 'bumpMap', 'normalMap', 'emissiveMap'] as const) {
+            const texture = mapped[key];
+            if (texture && !textures.has(texture)) {
+              textures.add(texture);
+              texture.dispose();
+            }
+          }
+          mat.dispose();
+        }
+      });
       renderer.dispose();
+      renderer.forceContextLoss();
     };
-  }, [data, isPlaying, speedMultiplier]);
+  }, [data]);
 
   // Raycaster to detect planet sprite under cursor
   const getIntersectedSprite = useCallback((clientX: number, clientY: number): THREE.Sprite | null => {
@@ -1638,7 +1695,9 @@ export const Galaxy3DView: React.FC<Galaxy3DViewProps> = ({ data, onSelectUser }
               总互动 <span className="font-bold text-indigo-300">{data.stats.totalInteractions.toLocaleString()}</span> 次
             </span>
             <span className="hidden md:inline">
-              双向率 <span className="font-bold text-emerald-400">{data.stats.mutualRatio}%</span>
+              双向率 <span className="font-bold text-emerald-400">{data.allUsers.length
+                ? Math.round((data.allUsers.filter((user) => user.relationship === 'mutual').length / data.allUsers.length) * 100)
+                : data.stats.mutualRatio}%</span>
             </span>
           </div>
 

@@ -15,7 +15,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2">
         {/* Brand */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 p-[1px] shadow-lg shadow-indigo-500/20">
@@ -28,7 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
                 OpenXCircle
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full">
+              <span className="hidden sm:inline px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full">
                 Pure Open Source
               </span>
             </div>
@@ -39,53 +39,53 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* View Mode Switcher */}
-        <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
+        <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner overflow-x-auto max-w-[52vw] sm:max-w-none">
           <button
             onClick={() => onUpdateSettings({ viewMode: 'orbit' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               settings.viewMode === 'orbit'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Orbit className="w-3.5 h-3.5" />
-            <span>2D 轨道</span>
+            <span className="hidden sm:inline">2D 轨道</span>
           </button>
 
           <button
             onClick={() => onUpdateSettings({ viewMode: 'galaxy3d' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               settings.viewMode === 'galaxy3d'
                 ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>3D 宇宙</span>
+            <span className="hidden sm:inline">3D 宇宙</span>
           </button>
 
           <button
             onClick={() => onUpdateSettings({ viewMode: 'tierlist' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               settings.viewMode === 'tierlist'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Trophy className="w-3.5 h-3.5" />
-            <span>段位榜单</span>
+            <span className="hidden sm:inline">段位榜单</span>
           </button>
 
           <button
             onClick={() => onUpdateSettings({ viewMode: 'insights' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               settings.viewMode === 'insights'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <PieChart className="w-3.5 h-3.5" />
-            <span>社交洞察</span>
+            <span className="hidden sm:inline">社交洞察</span>
           </button>
         </div>
 

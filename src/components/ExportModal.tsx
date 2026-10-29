@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Download, X, Image as ImageIcon } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { drawCircleCanvas } from '../core/canvasRenderer';
+import { drawCircleCanvas, preloadImage } from '../core/canvasRenderer';
 import { THEMES } from '../core/themes';
 import type { CircleData, CustomizationSettings } from '../types';
 
@@ -19,8 +19,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   settings,
 }) => {
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '9:16' | '16:9'>('1:1');
-  const [resolution, setResolution] = useState<2000 | 4000>(2000);
+  const [resolution, setResolution] = useState<2000 | 4000>(settings.exportScale === 4 ? 4000 : 2000);
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setResolution(settings.exportScale === 4 ? 4000 : 2000);
+    }
+  }, [isOpen, settings.exportScale]);
 
   if (!isOpen) return null;
 
@@ -47,6 +53,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       if (!ctx) throw new Error('无法创建绘图上下文');
 
       const theme = THEMES[settings.theme] || THEMES.cosmic;
+      const avatarUrls = [
+        data.targetUser.avatar,
+        ...data.allUsers.map((user) => user.avatar),
+      ].filter(Boolean);
+      await Promise.all(avatarUrls.map((url) => preloadImage(url)));
       drawCircleCanvas(ctx, w, h, data, theme, settings, 0);
 
       // Convert to blob and download

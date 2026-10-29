@@ -89,22 +89,25 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
 
   const authorsToYou = rawData.aggregates?.authorsToYou || {};
   const targetsFromYou = rawData.aggregates?.targetsFromYou || {};
+  const sortedUsers = [...rawData.circleUsers].sort((a, b) => {
+    const byScore = (b.interactionScore || 0) - (a.interactionScore || 0);
+    if (byScore !== 0) return byScore;
+    return (b.interactionCount || 0) - (a.interactionCount || 0);
+  });
 
   let mutualCount = 0;
 
   // Transform raw circleUsers to UserNode
-  const allScoredUsers: UserNode[] = rawData.circleUsers.map((u, i) => {
+  const allScoredUsers: UserNode[] = sortedUsers.map((u, i) => {
     const toYou = authorsToYou[u.screenName.toLowerCase()] || 0;
     const fromYou = targetsFromYou[u.screenName.toLowerCase()] || 0;
 
-    let relationship: RelationshipType = 'mutual';
+    let relationship: RelationshipType = 'admire';
     if (toYou > 0 && fromYou > 0) {
       relationship = 'mutual';
       mutualCount += 1;
     } else if (toYou > fromYou) {
       relationship = 'fan';
-    } else {
-      relationship = 'admire';
     }
 
     const badges: string[] = [];
@@ -116,10 +119,10 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
     if (u.interactionCount >= 5) badges.push('高频互动');
     else if (badges.length === 0) badges.push('常客互动');
 
-    const repliesCount = Math.max(1, toYou + fromYou);
+    // The relay only returns directional totals, not quote/retweet splits.
+    const directed = toYou + fromYou;
     const score = Math.min(99, Math.max(12, Math.round(u.interactionScore || (u.interactionCount * 10))));
 
-    // Assign rank
     const rank = (i < 8 ? 'S' : i < 23 ? 'A' : i < 48 ? 'B' : 'C') as 'S' | 'A' | 'B' | 'C';
 
     const rawAvatar = u.avatarUrl || u.avatarUrlPreview;
@@ -137,11 +140,11 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
       ring: (i < 8 ? 1 : i < 23 ? 2 : 3) as 1 | 2 | 3,
       relationship,
       interactions: {
-        replies: repliesCount,
-        quotes: Math.round(repliesCount * 0.25),
-        retweets: Math.max(0, u.interactionCount - repliesCount),
-        mentions: Math.round(repliesCount * 0.4),
-        total: u.interactionCount || repliesCount,
+        replies: directed,
+        quotes: 0,
+        retweets: 0,
+        mentions: 0,
+        total: u.interactionCount || directed,
       },
       badges,
     };
@@ -159,7 +162,7 @@ export async function fetchOnlineCircle(handle: string): Promise<CircleData> {
 
   const mutualRatio = allScoredUsers.length > 0
     ? Math.round((mutualCount / allScoredUsers.length) * 100)
-    : 70;
+    : 0;
 
   const targetName = fxProfile?.name || cleanHandle;
   const rawTargetAvatar = rawData.selfAvatarUrl || fxProfile?.avatar_url;

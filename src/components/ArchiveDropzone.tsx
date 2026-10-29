@@ -9,6 +9,23 @@ interface ArchiveDropzoneProps {
   onSuccess: (data: CircleData) => void;
 }
 
+function parseInWorker(file: File): Promise<CircleData> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../core/archive.worker.ts', import.meta.url), { type: 'module' });
+    const finish = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<{ ok: boolean; data?: CircleData; error?: string }>) => {
+      finish();
+      if (event.data.ok && event.data.data) resolve(event.data.data);
+      else reject(new Error(event.data.error || '解析失败'));
+    };
+    worker.onerror = () => {
+      finish();
+      reject(new Error('__worker_unavailable__'));
+    };
+    worker.postMessage({ file });
+  });
+}
+
 export const ArchiveDropzone: React.FC<ArchiveDropzoneProps> = ({
   isOpen,
   onClose,
@@ -25,7 +42,10 @@ export const ArchiveDropzone: React.FC<ArchiveDropzoneProps> = ({
     setErrorMsg(null);
     setIsProcessing(true);
     try {
-      const data = await parseTwitterArchive(file);
+      const data = await parseInWorker(file).catch((err: Error) => {
+        if (err.message === '__worker_unavailable__') return parseTwitterArchive(file);
+        throw err;
+      });
       onSuccess(data);
       onClose();
     } catch (err) {
@@ -76,7 +96,7 @@ export const ArchiveDropzone: React.FC<ArchiveDropzoneProps> = ({
               </span>
             </h3>
             <p className="text-xs text-slate-400">
-              数据仅留在你的浏览器本地内存中运算，零网络请求、零泄露风险。
+              推文只在你的浏览器里计算，不会上传。头像用首字母，不会把用户名发给第三方。
             </p>
           </div>
         </div>

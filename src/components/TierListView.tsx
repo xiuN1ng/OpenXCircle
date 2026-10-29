@@ -22,7 +22,7 @@ export const TierListView: React.FC<TierListViewProps> = ({ data, onSelectUser }
       description: '最高频互动，几乎每条动态都有彼此的身影，双向奔赴的推特搭子',
       color: 'from-amber-500 to-rose-500',
       badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-      users: data.innerRing,
+      users: data.allUsers.filter((user) => user.rank === 'S'),
     },
     {
       rank: 'A',
@@ -30,7 +30,7 @@ export const TierListView: React.FC<TierListViewProps> = ({ data, onSelectUser }
       description: '定期观点交流、长文回复探讨与高频转推点赞',
       color: 'from-purple-500 to-indigo-500',
       badgeBg: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      users: data.middleRing,
+      users: data.allUsers.filter((user) => user.rank === 'A'),
     },
     {
       rank: 'B',
@@ -38,7 +38,7 @@ export const TierListView: React.FC<TierListViewProps> = ({ data, onSelectUser }
       description: '在特定话题、技术探讨或生活动态中保持交流',
       color: 'from-blue-500 to-cyan-500',
       badgeBg: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      users: data.outerRing.slice(0, 14),
+      users: data.allUsers.filter((user) => user.rank === 'B'),
     },
     {
       rank: 'C',
@@ -46,7 +46,7 @@ export const TierListView: React.FC<TierListViewProps> = ({ data, onSelectUser }
       description: '偶尔互动、互相点赞与默默关注',
       color: 'from-slate-500 to-slate-400',
       badgeBg: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-      users: data.outerRing.slice(14),
+      users: data.allUsers.filter((user) => user.rank === 'C'),
     },
   ];
 
